@@ -433,8 +433,14 @@ pub enum Type {
     },
 
     // Union and intersection types
-    Union(Vec<Type>),
-    Intersection(Vec<Type>),
+    Union {
+        left: Box<Type>,
+        right: Box<Type>,
+    },
+    Intersection {
+        left: Box<Type>,
+        right: Box<Type>,
+    },
 
     // Array and tuple types
     Array(Box<Type>),

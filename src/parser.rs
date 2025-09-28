@@ -648,6 +648,35 @@ impl Parser {
 
     /// Parse type
     fn parse_type(&mut self) -> Result<Type> {
+        let mut left_type = self.parse_primary_type()?;
+        
+        // Handle union and intersection types
+        while matches!(self.current_token(), Token::Union | Token::Intersection) {
+            let operator = self.current_token().clone();
+            self.advance();
+            let right_type = self.parse_primary_type()?;
+            
+            left_type = match operator {
+                Token::Union => Type::Union {
+                    left: Box::new(left_type),
+                    right: Box::new(right_type),
+                },
+                Token::Intersection => Type::Intersection {
+                    left: Box::new(left_type),
+                    right: Box::new(right_type),
+                },
+                _ => return Err(CompilerError::parse_error(
+                    1,
+                    1,
+                    "Expected union or intersection operator",
+                )),
+            };
+        }
+        
+        Ok(left_type)
+    }
+    
+    fn parse_primary_type(&mut self) -> Result<Type> {
         let token = self.current_token().clone();
         match token {
             Token::Keyword(crate::lexer::Keyword::String) => {
@@ -677,6 +706,41 @@ impl Parser {
             Token::Keyword(crate::lexer::Keyword::Unknown) => {
                 self.advance();
                 Ok(Type::Unknown)
+            }
+            Token::Keyword(crate::lexer::Keyword::Array) => {
+                self.advance();
+                if self.current_token() == &Token::LessThan {
+                    self.advance(); // consume <
+                    let element_type = self.parse_primary_type()?;
+                    self.expect_token(&Token::GreaterThan)?;
+                    Ok(Type::Array(Box::new(element_type)))
+                } else {
+                    Ok(Type::Array(Box::new(Type::Any)))
+                }
+            }
+            Token::Keyword(crate::lexer::Keyword::Readonly) => {
+                self.advance();
+                // Parse the type that follows readonly
+                let element_type = self.parse_primary_type()?;
+                // For now, just return the element type (readonly is handled at runtime)
+                Ok(element_type)
+            }
+            Token::Keyword(crate::lexer::Keyword::Keyof) => {
+                self.advance();
+                let target_type = self.parse_primary_type()?;
+                Ok(Type::String) // keyof T -> string for now
+            }
+            Token::Keyword(crate::lexer::Keyword::Key) => {
+                self.advance();
+                Ok(Type::String) // Key -> string for now
+            }
+            Token::Keyword(crate::lexer::Keyword::Infer) => {
+                self.advance();
+                Ok(Type::Any) // infer -> any for now
+            }
+            Token::Keyword(crate::lexer::Keyword::Null) => {
+                self.advance();
+                Ok(Type::Null) // null -> null for now
             }
             Token::Identifier(name) => {
                 self.advance();

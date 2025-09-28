@@ -40,6 +40,8 @@ pub enum Token {
     MinusAssign,
     MultiplyAssign,
     DivideAssign,
+    Union, // |
+    Intersection, // &
 
     // Delimiters
     LeftParen,
@@ -166,6 +168,7 @@ pub enum Keyword {
     Instanceof,
     Typeof,
     Keyof,
+    Key,
     Is,
     Asserts,
     Infer,
@@ -315,11 +318,7 @@ impl Lexer {
                     self.advance();
                     Ok(Some(Token::And))
                 } else {
-                    return Err(CompilerError::parse_error(
-                        self.line,
-                        self.column,
-                        "Unexpected character: &",
-                    ));
+                    Ok(Some(Token::Intersection))
                 }
             }
             '|' => {
@@ -327,11 +326,7 @@ impl Lexer {
                     self.advance();
                     Ok(Some(Token::Or))
                 } else {
-                    return Err(CompilerError::parse_error(
-                        self.line,
-                        self.column,
-                        "Unexpected character: |",
-                    ));
+                    Ok(Some(Token::Union))
                 }
             }
             '(' => Ok(Some(Token::LeftParen)),
@@ -584,8 +579,12 @@ impl Lexer {
             }
         }
 
-        // Check if it's a keyword
-        if let Some(keyword) = self.parse_keyword(&value) {
+        // Check if it's a boolean literal
+        if value == "true" {
+            Ok(Some(Token::Boolean(true)))
+        } else if value == "false" {
+            Ok(Some(Token::Boolean(false)))
+        } else if let Some(keyword) = self.parse_keyword(&value) {
             Ok(Some(Token::Keyword(keyword)))
         } else {
             Ok(Some(Token::Identifier(value)))
@@ -656,6 +655,7 @@ impl Lexer {
             "instanceof" => Some(Keyword::Instanceof),
             "typeof" => Some(Keyword::Typeof),
             "keyof" => Some(Keyword::Keyof),
+            "key" => Some(Keyword::Key),
             "is" => Some(Keyword::Is),
             "asserts" => Some(Keyword::Asserts),
             "infer" => Some(Keyword::Infer),

@@ -97,12 +97,19 @@ impl TypeMapper {
                     Ok(format!("{}<{}>", rust_name, param_types.join(", ")))
                 }
             }
+            
+            // Union and intersection types
+            Type::Union { left, right } => {
+                let left_type = self.map_type(left)?;
+                let right_type = self.map_type(right)?;
+                Ok(format!("Result<{}, {}>", left_type, right_type))
+            }
+            Type::Intersection { left, right } => {
+                let left_type = self.map_type(left)?;
+                let right_type = self.map_type(right)?;
+                Ok(format!("({} & {})", left_type, right_type))
+            }
 
-            // Union types
-            Type::Union(types) => self.map_union_type(types),
-
-            // Intersection types
-            Type::Intersection(types) => self.map_intersection_type(types),
 
             // Array types
             Type::Array(element_type) => {
@@ -452,7 +459,7 @@ impl TypeMappingUtils {
     pub fn needs_runtime(ts_type: &Type) -> bool {
         matches!(
             ts_type,
-            Type::Any | Type::Unknown | Type::Object | Type::Union(_) | Type::Intersection(_)
+            Type::Any | Type::Unknown | Type::Object | Type::Union { .. } | Type::Intersection { .. }
         )
     }
 
@@ -465,10 +472,10 @@ impl TypeMappingUtils {
                 imports.push("use std::any::Any;".to_string());
                 imports.push("use std::boxed::Box;".to_string());
             }
-            Type::Union(_) => {
+            Type::Union { .. } => {
                 imports.push("use serde::{Deserialize, Serialize};".to_string());
             }
-            Type::Intersection(_) => {
+            Type::Intersection { .. } => {
                 imports.push("use std::ops::Add;".to_string());
             }
             Type::Array(_) => {
@@ -479,6 +486,9 @@ impl TypeMappingUtils {
             }
             Type::Function(_) => {
                 imports.push("use std::boxed::Box;".to_string());
+            }
+            Type::Null => {
+                // No specific import needed for Null (unit type)
             }
             _ => {}
         }
