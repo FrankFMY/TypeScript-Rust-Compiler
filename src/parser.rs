@@ -2,7 +2,7 @@
 
 use crate::ast::*;
 use crate::error::{CompilerError, Result};
-use crate::lexer::Token;
+use crate::lexer::{Token, Keyword};
 
 /// Parser for TypeScript code
 pub struct Parser {
@@ -902,6 +902,45 @@ impl Parser {
                 self.expect_token(&Token::RightParen)?;
                 Ok(type_)
             }
+       Token::LeftBrace => {
+           // Parse object type: { prop: type; ... }
+           self.advance(); // consume {
+           let mut members = Vec::new();
+
+           while self.current_token() != &Token::RightBrace && self.current_token() != &Token::EOF {
+               // Check for readonly modifier
+               let readonly = if self.current_token() == &Token::Keyword(Keyword::Readonly) {
+                   self.advance(); // consume readonly
+                   true
+               } else {
+                   false
+               };
+
+               let name = self.expect_identifier()?;
+               let optional = if self.current_token() == &Token::QuestionMark {
+                   self.advance();
+                   true
+               } else {
+                   false
+               };
+               self.expect_token(&Token::Colon)?;
+               let type_ = self.parse_type()?;
+
+               members.push(ObjectTypeMember::Property(PropertySignature {
+                   name,
+                   optional,
+                   type_: Some(type_),
+                   readonly,
+               }));
+
+               if self.current_token() == &Token::Semicolon {
+                   self.advance();
+               }
+           }
+
+           self.expect_token(&Token::RightBrace)?;
+           Ok(Type::ObjectType(ObjectType { members }))
+       }
             _ => Err(CompilerError::parse_error(
                 self.position,
                 0,
