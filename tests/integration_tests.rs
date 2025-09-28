@@ -70,6 +70,9 @@ class Person {
     let mut compiler = Compiler::new();
     let result = compiler.compile(&input_file, &output_file);
 
+    if let Err(e) = &result {
+        println!("Compilation error: {:?}", e);
+    }
     assert!(result.is_ok());
 
     let rust_code = fs::read_to_string(&output_file).unwrap();
@@ -112,6 +115,9 @@ class Circle implements Shape {
     let mut compiler = Compiler::new();
     let result = compiler.compile(&input_file, &output_file);
 
+    if let Err(e) = &result {
+        println!("Interface compilation error: {:?}", e);
+    }
     assert!(result.is_ok());
 
     let rust_code = fs::read_to_string(&output_file).unwrap();

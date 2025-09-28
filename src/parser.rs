@@ -55,6 +55,8 @@ impl Parser {
                 crate::lexer::Keyword::Module => self.parse_module_declaration()?,
                 crate::lexer::Keyword::Declare => self.parse_declare_statement()?,
                 crate::lexer::Keyword::Return => self.parse_return_statement()?,
+                crate::lexer::Keyword::If => self.parse_if_statement()?,
+                crate::lexer::Keyword::Else => self.parse_expression_statement()?,
                 _ => self.parse_expression_statement()?,
             },
             Token::LeftBrace => self.parse_block_statement()?,
@@ -487,6 +489,10 @@ impl Parser {
                 self.advance();
                 Ok(Expression::Literal(Literal::String(s)))
             }
+            Token::TemplateLiteral(s) => {
+                self.advance();
+                Ok(Expression::Literal(Literal::String(s)))
+            }
             Token::Boolean(b) => {
                 self.advance();
                 Ok(Expression::Literal(Literal::Boolean(b)))
@@ -502,6 +508,10 @@ impl Parser {
             Token::Identifier(name) => {
                 self.advance();
                 Ok(Expression::Identifier(name))
+            }
+            Token::Keyword(crate::lexer::Keyword::This) => {
+                self.advance();
+                Ok(Expression::This(ThisExpression))
             }
             Token::LeftParen => {
                 self.advance();
@@ -720,7 +730,10 @@ impl Parser {
     }
 
     fn is_unary_operator(&self) -> bool {
-        matches!(self.current_token(), Token::Plus | Token::Minus | Token::Not)
+        matches!(self.current_token(), 
+            Token::Plus | Token::Minus | Token::Not | 
+            Token::Keyword(crate::lexer::Keyword::Typeof)
+        )
     }
 
     fn is_postfix_operator(&self) -> bool {
@@ -816,8 +829,25 @@ impl Parser {
     }
 
     fn parse_implements(&mut self) -> Result<Vec<Type>> {
-        // TODO: Implement implements parsing
-        Ok(Vec::new())
+        if self.current_token() == &Token::Keyword(crate::lexer::Keyword::Implements) {
+            self.advance();
+            let mut types = Vec::new();
+            
+            loop {
+                let type_ = self.parse_type()?;
+                types.push(type_);
+                
+                if self.current_token() == &Token::Comma {
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+            
+            Ok(types)
+        } else {
+            Ok(Vec::new())
+        }
     }
 
     fn parse_extends(&mut self) -> Result<Vec<Type>> {
@@ -826,18 +856,46 @@ impl Parser {
     }
 
     fn parse_class_body(&mut self) -> Result<ClassBody> {
-        // TODO: Implement class body parsing
-        Ok(ClassBody { members: Vec::new() })
+        self.expect_token(&Token::LeftBrace)?;
+        let mut members = Vec::new();
+        
+        while self.current_token() != &Token::RightBrace && self.current_token() != &Token::EOF {
+            let member = self.parse_class_member()?;
+            members.push(member);
+        }
+        
+        self.expect_token(&Token::RightBrace)?;
+        Ok(ClassBody { members })
     }
 
     fn parse_interface_body(&mut self) -> Result<InterfaceBody> {
-        // TODO: Implement interface body parsing
-        Ok(InterfaceBody { members: Vec::new() })
+        self.expect_token(&Token::LeftBrace)?;
+        let mut members = Vec::new();
+        
+        while self.current_token() != &Token::RightBrace && self.current_token() != &Token::EOF {
+            let member = self.parse_interface_member()?;
+            members.push(member);
+        }
+        
+        self.expect_token(&Token::RightBrace)?;
+        Ok(InterfaceBody { members })
     }
 
     fn parse_enum_members(&mut self) -> Result<Vec<EnumMember>> {
-        // TODO: Implement enum member parsing
-        Ok(Vec::new())
+        self.expect_token(&Token::LeftBrace)?;
+        let mut members = Vec::new();
+        
+        while self.current_token() != &Token::RightBrace && self.current_token() != &Token::EOF {
+            let member = self.parse_enum_member()?;
+            members.push(member);
+            
+            if self.current_token() == &Token::Comma {
+                self.advance();
+            }
+        }
+        
+        self.expect_token(&Token::RightBrace)?;
+        Ok(members)
     }
 
     fn parse_import_specifiers(&mut self) -> Result<Vec<ImportSpecifier>> {
@@ -864,6 +922,151 @@ impl Parser {
         }
         
         Ok(arguments)
+    }
+
+    fn parse_class_member(&mut self) -> Result<ClassMember> {
+        let token = self.current_token().clone();
+        
+        match token {
+            Token::Identifier(name) => {
+                self.advance();
+                
+                // Check if it's a method or property
+                if self.current_token() == &Token::LeftParen {
+                    // It's a method
+                    let parameters = self.parse_parameters()?;
+                    let return_type = if self.current_token() == &Token::Colon {
+                        self.advance();
+                        Some(self.parse_type()?)
+                    } else {
+                        None
+                    };
+                    let body = self.parse_block_statement()?;
+                    
+                    Ok(ClassMember::Method(MethodDeclaration {
+                        name,
+                        optional: false,
+                        type_parameters: Vec::new(),
+                        parameters,
+                        return_type,
+                        body: Some(body),
+                        modifiers: Vec::new(),
+                    }))
+                } else if self.current_token() == &Token::Colon {
+                    // It's a property
+                    self.advance();
+                    let type_annotation = self.parse_type()?;
+                    self.expect_token(&Token::Semicolon)?;
+                    
+                    Ok(ClassMember::Property(PropertyDeclaration {
+                        name,
+                        optional: false,
+                        type_: Some(type_annotation),
+                        initializer: None,
+                        modifiers: Vec::new(),
+                    }))
+                } else {
+                    // It's a constructor
+                    if name == "constructor" {
+                        let parameters = self.parse_parameters()?;
+                        let body = self.parse_block_statement()?;
+                        
+                        Ok(ClassMember::Constructor(ConstructorDeclaration {
+                            parameters,
+                            body: Some(body),
+                            modifiers: Vec::new(),
+                        }))
+                    } else {
+                        Err(CompilerError::parse_error(1, 1, "Unexpected class member".to_string()))
+                    }
+                }
+            }
+            _ => Err(CompilerError::parse_error(1, 1, "Expected class member".to_string()))
+        }
+    }
+
+    fn parse_interface_member(&mut self) -> Result<ObjectTypeMember> {
+        let token = self.current_token().clone();
+        
+        match token {
+            Token::Identifier(name) => {
+                self.advance();
+                
+                if self.current_token() == &Token::LeftParen {
+                    // It's a method signature
+                    let parameters = self.parse_parameters()?;
+                    let return_type = if self.current_token() == &Token::Colon {
+                        self.advance();
+                        Some(self.parse_type()?)
+                    } else {
+                        None
+                    };
+                    self.expect_token(&Token::Semicolon)?;
+                    
+                    Ok(ObjectTypeMember::Method(MethodSignature {
+                        name,
+                        optional: false,
+                        type_parameters: Vec::new(),
+                        parameters,
+                        return_type,
+                    }))
+                } else if self.current_token() == &Token::Colon {
+                    // It's a property signature
+                    self.advance();
+                    let type_annotation = self.parse_type()?;
+                    self.expect_token(&Token::Semicolon)?;
+                    
+                    Ok(ObjectTypeMember::Property(PropertySignature {
+                        name,
+                        optional: false,
+                        type_: Some(type_annotation),
+                        readonly: false,
+                    }))
+                } else {
+                    Err(CompilerError::parse_error(1, 1, "Expected method or property signature".to_string()))
+                }
+            }
+            _ => Err(CompilerError::parse_error(1, 1, "Expected interface member".to_string()))
+        }
+    }
+
+    fn parse_enum_member(&mut self) -> Result<EnumMember> {
+        let name = self.expect_identifier()?;
+        
+        let initializer = if self.current_token() == &Token::Assign {
+            self.advance();
+            Some(self.parse_expression()?)
+        } else {
+            None
+        };
+        
+        Ok(EnumMember {
+            name,
+            initializer,
+        })
+    }
+
+    fn parse_if_statement(&mut self) -> Result<Statement> {
+        self.expect_keyword()?; // if
+        
+        self.expect_token(&Token::LeftParen)?;
+        let test = self.parse_expression()?;
+        self.expect_token(&Token::RightParen)?;
+        
+        let consequent = self.parse_statement()?.unwrap();
+        
+        let alternate = if self.current_token() == &Token::Keyword(crate::lexer::Keyword::Else) {
+            self.advance();
+            Some(self.parse_statement()?.unwrap())
+        } else {
+            None
+        };
+        
+        Ok(Statement::IfStatement(Box::new(IfStatement {
+            condition: test,
+            consequent: Box::new(consequent),
+            alternate,
+        })))
     }
 
     fn parse_property_key(&mut self) -> Result<Expression> {

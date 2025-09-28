@@ -9,6 +9,7 @@ pub enum Token {
     // Literals
     Number(f64),
     String(String),
+    TemplateLiteral(String),
     Boolean(bool),
     Null,
     Undefined,
@@ -333,6 +334,7 @@ impl Lexer {
             ':' => Ok(Some(Token::Colon)),
             '?' => Ok(Some(Token::QuestionMark)),
             '"' | '\'' => Ok(self.parse_string()?),
+            '`' => Ok(self.parse_template_literal()?),
             '0'..='9' => Ok(self.parse_number()?),
             'a'..='z' | 'A'..='Z' | '_' | '$' => Ok(self.parse_identifier_or_keyword()?),
             _ => {
@@ -453,6 +455,44 @@ impl Lexer {
             self.line,
             self.column,
             "Unterminated string literal",
+        ))
+    }
+
+    /// Parse template literal
+    fn parse_template_literal(&mut self) -> Result<Option<Token>> {
+        let mut value = String::new();
+        self.advance(); // consume opening backtick
+
+        while self.position < self.input.len() {
+            let ch = self.current_char();
+            if ch == '`' {
+                self.advance();
+                return Ok(Some(Token::TemplateLiteral(value)));
+            } else if ch == '\\' {
+                self.advance();
+                if self.position < self.input.len() {
+                    let escaped = self.current_char();
+                    value.push(match escaped {
+                        'n' => '\n',
+                        't' => '\t',
+                        'r' => '\r',
+                        '\\' => '\\',
+                        '`' => '`',
+                        '$' => '$',
+                        _ => escaped,
+                    });
+                    self.advance();
+                }
+            } else {
+                value.push(ch);
+                self.advance();
+            }
+        }
+
+        Err(CompilerError::parse_error(
+            self.line,
+            self.column,
+            "Unterminated template literal",
         ))
     }
 
