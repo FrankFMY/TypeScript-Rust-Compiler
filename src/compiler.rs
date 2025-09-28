@@ -3,6 +3,7 @@
 use crate::error::{CompilerError, Result};
 use crate::generator::CodeGenerator;
 use crate::lexer::Lexer;
+use crate::lexer_utf8::Utf8Lexer;
 use crate::parser::Parser;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -47,8 +48,8 @@ impl Compiler {
         // Read input file
         let input_content = fs::read_to_string(input).map_err(CompilerError::Io)?;
 
-        // Create lexer and tokenize
-        let mut lexer = Lexer::new(input_content);
+        // Create UTF-8 compatible lexer and tokenize
+        let mut lexer = Utf8Lexer::new(input_content);
         let tokens = lexer.tokenize()?;
 
         // Create parser and parse AST

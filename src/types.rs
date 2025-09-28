@@ -102,12 +102,21 @@ impl TypeMapper {
             Type::Union { left, right } => {
                 let left_type = self.map_type(left)?;
                 let right_type = self.map_type(right)?;
-                Ok(format!("Result<{}, {}>", left_type, right_type))
+                Ok(format!("Union<{}, {}>", left_type, right_type))
             }
             Type::Intersection { left, right } => {
+                // For intersection types, we need to handle them differently
+                // since they can't be directly represented in Rust
                 let left_type = self.map_type(left)?;
                 let right_type = self.map_type(right)?;
-                Ok(format!("({} & {})", left_type, right_type))
+                
+                // Check if both types are object types
+                if left_type.starts_with("#[derive") && right_type.starts_with("#[derive") {
+                    // Generate a combined struct
+                    Ok(format!("CombinedObject"))
+                } else {
+                    Ok(format!("Intersection<{}, {}>", left_type, right_type))
+                }
             }
 
 
@@ -311,8 +320,11 @@ impl TypeMapper {
             }
         }
 
+        // Generate a proper struct name for object types
+        let struct_name = format!("ObjectType_{}", struct_fields.len());
         Ok(format!(
-            "struct ObjectType {{\n    {}\n}}",
+            "#[derive(Debug, Clone, Serialize, Deserialize)]\npub struct {} {{\n    {}\n}}",
+            struct_name,
             struct_fields.join(",\n    ")
         ))
     }

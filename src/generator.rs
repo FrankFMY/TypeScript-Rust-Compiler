@@ -152,8 +152,10 @@ impl CodeGenerator {
     fn generate_runtime_support(&self) -> String {
         r#"
 // Runtime support for TypeScript semantics
-pub type Any = Box<dyn Any>;
-pub type Unknown = Box<dyn Any>;
+use std::any::Any;
+
+pub type AnyType = Box<dyn Any>;
+pub type UnknownType = Box<dyn Any>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Symbol {
@@ -167,10 +169,15 @@ impl Symbol {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum UnionType<T> {
-    Variant1(T),
-    Variant2(T),
-    Variant3(T),
+pub enum Union<T, U> {
+    Left(T),
+    Right(U),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Intersection<T, U> {
+    pub left: T,
+    pub right: U,
 }
 
 pub trait TypeScriptObject {
@@ -265,13 +272,21 @@ impl TypeScriptObject for HashMap<String, Any> {
             }
         }
 
+        // Handle generic parameters for class
+        let generic_params = if class.type_parameters.is_empty() {
+            String::new()
+        } else {
+            let params: Vec<String> = class.type_parameters.iter().map(|p| p.name.clone()).collect();
+            format!("<{}>", params.join(", "))
+        };
+
         let struct_code = format!(
-            "#[derive(Debug, Clone, Serialize, Deserialize)]\npub struct {} {{\n{}\n}}",
-            name,
+            "#[derive(Debug, Clone, Serialize, Deserialize)]\npub struct {}{} {{\n{}\n}}",
+            name, generic_params,
             fields.join(",\n")
         );
 
-        let impl_code = format!("impl {} {{\n{}\n}}", name, methods.join("\n"));
+        let impl_code = format!("impl{}{} {{\n{}\n}}", generic_params, name, methods.join("\n"));
 
         Ok((struct_code, impl_code))
     }
@@ -280,6 +295,14 @@ impl TypeScriptObject for HashMap<String, Any> {
     fn generate_interface(&mut self, interface: &InterfaceDeclaration) -> Result<String> {
         let name = &interface.name;
         let mut methods = Vec::new();
+
+        // Handle generic parameters
+        let generic_params = if interface.type_parameters.is_empty() {
+            String::new()
+        } else {
+            let params: Vec<String> = interface.type_parameters.iter().map(|p| p.name.clone()).collect();
+            format!("<{}>", params.join(", "))
+        };
 
         for member in &interface.body.members {
             match member {
@@ -306,7 +329,7 @@ impl TypeScriptObject for HashMap<String, Any> {
             }
         }
 
-        Ok(format!("pub trait {} {{\n{}\n}}", name, methods.join("\n")))
+        Ok(format!("pub trait {}{} {{\n{}\n}}", name, generic_params, methods.join("\n")))
     }
 
     /// Generate type alias
@@ -442,26 +465,68 @@ impl TypeScriptObject for HashMap<String, Any> {
     fn generate_enum(&mut self, enum_decl: &EnumDeclaration) -> Result<String> {
         let name = &enum_decl.name;
         let mut variants = Vec::new();
+        let mut has_string_values = false;
 
+        // Check if enum has string values
         for member in &enum_decl.members {
-            let variant_name = &member.name;
-            let variant_value = if let Some(ref init) = member.initializer {
-                match init {
-                    Expression::Literal(Literal::String(s)) => format!(" = \"{}\"", s),
-                    Expression::Literal(Literal::Number(n)) => format!(" = {}", n),
-                    _ => String::new(),
+            if let Some(ref init) = member.initializer {
+                if matches!(init, Expression::Literal(Literal::String(_))) {
+                    has_string_values = true;
+                    break;
                 }
-            } else {
-                String::new()
-            };
-            variants.push(format!("    {}{}", variant_name, variant_value));
+            }
         }
 
-        Ok(format!(
-            "#[derive(Debug, Clone, Serialize, Deserialize)]\npub enum {} {{\n{}\n}}",
-            name,
-            variants.join(",\n")
-        ))
+        if has_string_values {
+            // Generate enum with string values using const
+            let mut const_definitions = Vec::new();
+            let mut enum_variants = Vec::new();
+
+            for member in &enum_decl.members {
+                let variant_name = &member.name;
+                if let Some(ref init) = member.initializer {
+                    match init {
+                        Expression::Literal(Literal::String(s)) => {
+                            const_definitions.push(format!(
+                                "pub const {}: &str = \"{}\";",
+                                variant_name, s
+                            ));
+                        }
+                        _ => {
+                            enum_variants.push(format!("    {}", variant_name));
+                        }
+                    }
+                } else {
+                    enum_variants.push(format!("    {}", variant_name));
+                }
+            }
+
+            let mut result = String::new();
+            if !const_definitions.is_empty() {
+                result.push_str(&const_definitions.join("\n"));
+                result.push('\n');
+            }
+            if !enum_variants.is_empty() {
+                result.push_str(&format!(
+                    "#[derive(Debug, Clone, Serialize, Deserialize)]\npub enum {} {{\n{}\n}}",
+                    name,
+                    enum_variants.join(",\n")
+                ));
+            }
+            Ok(result)
+        } else {
+            // Generate regular enum
+            for member in &enum_decl.members {
+                let variant_name = &member.name;
+                variants.push(format!("    {}", variant_name));
+            }
+
+            Ok(format!(
+                "#[derive(Debug, Clone, Serialize, Deserialize)]\npub enum {} {{\n{}\n}}",
+                name,
+                variants.join(",\n")
+            ))
+        }
     }
 
     /// Generate variable

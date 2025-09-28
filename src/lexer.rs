@@ -120,6 +120,7 @@ pub enum Keyword {
     Readonly,
     Get,
     Set,
+    Constructor,
 
     // Async
     Async,
@@ -136,6 +137,8 @@ pub enum Keyword {
     Boolean,
     Number,
     String,
+    Symbol,
+    BigInt,
     Object,
     Array,
     Tuple,
@@ -196,6 +199,11 @@ impl Lexer {
             line: 1,
             column: 1,
         }
+    }
+    
+    /// Create a UTF-8 compatible lexer
+    pub fn new_utf8(input: String) -> Self {
+        Self::new(input)
     }
 
     /// Tokenize the input string
@@ -348,6 +356,7 @@ impl Lexer {
             '`' => Ok(self.parse_template_literal()?),
             '0'..='9' => Ok(self.parse_number()?),
             'a'..='z' | 'A'..='Z' | '_' | '$' => Ok(self.parse_identifier_or_keyword()?),
+            _ if ch.is_alphabetic() || ch.is_alphanumeric() => Ok(self.parse_identifier_or_keyword()?),
             _ => {
                 return Err(CompilerError::parse_error(
                     self.line,
@@ -368,6 +377,9 @@ impl Lexer {
             '"' | '\'' => {
                 // parse_string manages position itself
             }
+            _ if ch.is_alphabetic() || ch.is_alphanumeric() => {
+                // parse_identifier_or_keyword manages position itself
+            }
             _ => {
                 // Simple tokens need to advance
                 self.advance();
@@ -380,6 +392,11 @@ impl Lexer {
     fn current_char(&self) -> char {
         self.input.chars().nth(self.position).unwrap_or('\0')
     }
+    
+    /// Check if we can safely get current character
+    fn has_current_char(&self) -> bool {
+        self.position < self.input.len()
+    }
 
     /// Peek at next character
     fn peek_char(&self) -> Option<char> {
@@ -388,13 +405,18 @@ impl Lexer {
 
     /// Advance position
     fn advance(&mut self) {
-        if self.current_char() == '\n' {
-            self.line += 1;
-            self.column = 1;
-        } else {
-            self.column += 1;
+        if self.position < self.input.len() {
+            let ch = self.current_char();
+            if ch == '\n' {
+                self.line += 1;
+                self.column = 1;
+            } else {
+                self.column += 1;
+            }
+            
+            // Simple advance by one character position
+            self.position += 1;
         }
-        self.position += 1;
     }
 
     /// Skip whitespace

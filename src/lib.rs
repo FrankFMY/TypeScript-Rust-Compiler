@@ -9,6 +9,7 @@ pub mod compiler;
 pub mod error;
 pub mod generator;
 pub mod lexer;
+pub mod lexer_utf8;
 pub mod parser;
 pub mod semantic;
 pub mod test_lexer;
