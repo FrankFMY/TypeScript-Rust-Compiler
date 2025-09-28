@@ -1,4 +1,4 @@
-// Basic TypeScript example for TS2RS compiler
+// Basic TypeScript example for TypeScript-Rust-Compiler
 
 // Simple function
 function greet(name: string): string {

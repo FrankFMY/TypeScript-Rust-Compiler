@@ -1,8 +1,8 @@
-//! Integration tests for the TS2RS compiler
+//! Integration tests for the TypeScript-Rust-Compiler
 
 use std::fs;
 use tempfile::TempDir;
-use ts2rs::compiler::Compiler;
+use TypeScript_Rust_Compiler::compiler::Compiler;
 
 /// Test basic TypeScript compilation
 #[test]

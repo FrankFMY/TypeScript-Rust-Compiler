@@ -1,0 +1,3 @@
+#!/bin/bash
+# TypeScript-Rust-Compiler CLI wrapper for npm package
+exec "$(dirname "$0")/typescript-rust-compiler" "$@"

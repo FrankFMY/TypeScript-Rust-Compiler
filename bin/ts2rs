@@ -1,3 +1,0 @@
-#!/bin/bash
-# TS2RS CLI wrapper for npm package
-exec "$(dirname "$0")/ts2rs" "$@"

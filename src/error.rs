@@ -1,4 +1,4 @@
-//! Error handling for the TS2RS compiler
+//! Error handling for the TypeScript-Rust-Compiler
 
 use thiserror::Error;
 

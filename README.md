@@ -1,4 +1,4 @@
-# TS2RS - TypeScript to Rust Compiler
+# TypeScript-Rust-Compiler - TypeScript to Rust Compiler
 
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -19,7 +19,7 @@ A high-performance compiler that transforms TypeScript code into idiomatic Rust,
 
 ```bash
 # Install from crates.io (when published)
-cargo install ts2rs
+cargo install TypeScript-Rust-Compiler
 
 # Or build from source
 git clone https://github.com/FrankFMY/TypeScript-Rust-Compiler.git
@@ -33,16 +33,16 @@ cargo build --release
 
 ```bash
 # Compile a single TypeScript file
-ts2rs input.ts -o output.rs
+typescript-rust-compiler input.ts -o output.rs
 
 # Compile with optimization
-ts2rs input.ts -o output.rs --optimize
+typescript-rust-compiler input.ts -o output.rs --optimize
 
 # Compile with runtime support
-ts2rs input.ts -o output.rs --runtime
+typescript-rust-compiler input.ts -o output.rs --runtime
 
 # Compile an entire project
-ts2rs src/ -o rust-project/
+typescript-rust-compiler src/ -o rust-project/
 ```
 
 ### Example
@@ -194,7 +194,7 @@ impl Calculator {
 ## 🛠️ Command Line Options
 
 ```bash
-ts2rs [OPTIONS] <INPUT> -o <OUTPUT>
+typescript-rust-compiler [OPTIONS] <INPUT> -o <OUTPUT>
 
 OPTIONS:
     -o, --output <OUTPUT>        Output file or directory
@@ -209,7 +209,7 @@ OPTIONS:
 ## 📁 Project Structure
 
 ```
-ts2rs/
+typescript-rust-compiler/
 ├── src/
 │   ├── lexer/          # Lexical analysis
 │   ├── parser/         # Syntax analysis
@@ -303,4 +303,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**Made with ❤️ by the TS2RS team**
+**Made with ❤️ by the TypeScript-Rust-Compiler team**

@@ -1,15 +1,15 @@
 {
-	"name": "ts2rs",
+	"name": "TypeScript-Rust-Compiler",
 	"version": "0.1.5",
 	"description": "High-performance TypeScript to Rust compiler",
 	"main": "index.js",
 	"bin": {
-		"ts2rs": "./bin/ts2rs"
+		"typescript-rust-compiler": "./bin/typescript-rust-compiler"
 	},
 	"scripts": {
 		"build": "cargo build --release",
 		"test": "cargo test",
-		"install": "cargo build --release && cp target/release/ts2rs bin/",
+		"install": "cargo build --release && cp target/release/TypeScript-Rust-Compiler bin/",
 		"prepublishOnly": "cargo build --release"
 	},
 	"keywords": [
@@ -18,7 +18,7 @@
 		"compiler",
 		"transpiler",
 		"typescript-to-rust",
-		"ts2rs"
+		"typescript-rust-compiler"
 	],
 	"author": "FrankFMY <pryanishnikovartem@gmail.com>",
 	"license": "MIT",

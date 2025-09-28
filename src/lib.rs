@@ -1,4 +1,4 @@
-//! # TS2RS - TypeScript to Rust Compiler
+//! # TypeScript-Rust-Compiler - TypeScript to Rust Compiler
 //! 
 //! A high-performance compiler that transforms TypeScript code into idiomatic Rust.
 //! Supports all TypeScript features including advanced types, generics, decorators,

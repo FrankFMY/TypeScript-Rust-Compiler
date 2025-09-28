@@ -1,10 +1,10 @@
 use clap::Parser;
 use std::path::PathBuf;
-use ts2rs::compiler::Compiler;
-use ts2rs::error::Result;
+use TypeScript_Rust_Compiler::compiler::Compiler;
+use TypeScript_Rust_Compiler::error::Result;
 
 #[derive(Parser)]
-#[command(name = "ts2rs")]
+#[command(name = "typescript-rust-compiler")]
 #[command(about = "High-performance TypeScript to Rust compiler")]
 #[command(version)]
 struct Cli {
@@ -56,7 +56,7 @@ fn main() -> Result<()> {
 
             // Test lexer (only in debug mode)
             if cli.debug {
-                ts2rs::test_lexer::test_lexer();
+                TypeScript_Rust_Compiler::test_lexer::test_lexer();
             }
     
     // Compile TypeScript to Rust

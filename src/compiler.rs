@@ -246,7 +246,7 @@ pub use runtime::{Any, Unknown, TypeScriptObject};
     fn generate_readme(&self) -> String {
         r#"# Generated Rust Project
 
-This project was generated from TypeScript code using the TS2RS compiler.
+This project was generated from TypeScript code using the TypeScript-Rust-Compiler.
 
 ## Building
 
@@ -302,7 +302,7 @@ Thumbs.db
     /// Get compiler information
     pub fn info(&self) -> String {
         format!(
-            "TS2RS Compiler v{}\nOptimization: {}\nRuntime: {}",
+            "TypeScript-Rust-Compiler v{}\nOptimization: {}\nRuntime: {}",
             Self::version(),
             self.optimize,
             self.runtime
