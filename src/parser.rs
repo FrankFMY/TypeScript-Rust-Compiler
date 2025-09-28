@@ -1549,6 +1549,17 @@ impl Parser {
         let token = self.current_token().clone();
 
         match token {
+            Token::Keyword(crate::lexer::Keyword::Constructor) => {
+                self.advance();
+                let parameters = self.parse_parameters()?;
+                let body = self.parse_block_statement()?;
+
+                Ok(ClassMember::Constructor(ConstructorDeclaration {
+                    parameters,
+                    body: Some(body),
+                    modifiers,
+                }))
+            }
             Token::Keyword(crate::lexer::Keyword::Get) => {
                 self.advance();
                 let name = if let Token::Identifier(name) = self.current_token() {
@@ -1650,6 +1661,7 @@ impl Parser {
 
                 // Special handling for constructor
                 if name == "constructor" {
+                    println!("DEBUG: parsing constructor");
                     // It's a constructor
                     let parameters = self.parse_parameters()?;
                     let body = self.parse_block_statement()?;

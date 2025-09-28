@@ -2,6 +2,7 @@
 
 use crate::ast::*;
 use crate::error::{CompilerError, Result};
+use crate::lexer::Token;
 use crate::types::TypeMapper;
 
 /// Rust code generator
@@ -63,7 +64,19 @@ impl CodeGenerator {
                 }
                 Statement::TypeAlias(type_alias) => {
                     let type_code = self.generate_type_alias(type_alias)?;
-                    self.structs.push(type_code);
+        // Check if this is an intersection type that needs additional struct generation
+        if let Type::Intersection { left, right } = &type_alias.type_definition {
+            if let Type::ObjectType(_) = &**left {
+                if let Type::ObjectType(_) = &**right {
+                    // Generate combined struct for intersection
+                    let combined_struct = self.generate_intersection_struct(&type_alias.name, left, right)?;
+                    self.structs.push(combined_struct.clone());
+                    // Return the struct code instead of type alias
+                    return Ok(combined_struct);
+                }
+            }
+        }
+        self.structs.push(type_code);
                 }
                 Statement::EnumDeclaration(enum_decl) => {
                     let enum_code = self.generate_enum(enum_decl)?;
@@ -286,7 +299,7 @@ impl TypeScriptObject for HashMap<String, Any> {
             fields.join(",\n")
         );
 
-        let impl_code = format!("impl{}{} {{\n{}\n}}", generic_params, name, methods.join("\n"));
+        let impl_code = format!("impl {}{} {{\n{}\n}}", generic_params, name, methods.join("\n"));
 
         Ok((struct_code, impl_code))
     }
@@ -337,6 +350,45 @@ impl TypeScriptObject for HashMap<String, Any> {
         let name = &type_alias.name;
         let type_def = self.type_mapper.map_type(&type_alias.type_definition)?;
         Ok(format!("pub type {} = {};", name, type_def))
+    }
+
+    /// Generate intersection struct for object types
+    fn generate_intersection_struct(&mut self, name: &str, left: &Type, right: &Type) -> Result<String> {
+        let mut fields = Vec::new();
+        
+        // Extract fields from left object type
+        if let Type::ObjectType(left_obj) = left {
+            for member in &left_obj.members {
+                if let ObjectTypeMember::Property(prop) = member {
+                    let field_type = if let Some(ref t) = prop.type_ {
+                        self.type_mapper.map_type(t)?
+                    } else {
+                        "Box<dyn Any>".to_string()
+                    };
+                    fields.push(format!("    pub {}: {}", prop.name, field_type));
+                }
+            }
+        }
+        
+        // Extract fields from right object type
+        if let Type::ObjectType(right_obj) = right {
+            for member in &right_obj.members {
+                if let ObjectTypeMember::Property(prop) = member {
+                    let field_type = if let Some(ref t) = prop.type_ {
+                        self.type_mapper.map_type(t)?
+                    } else {
+                        "Box<dyn Any>".to_string()
+                    };
+                    fields.push(format!("    pub {}: {}", prop.name, field_type));
+                }
+            }
+        }
+        
+        Ok(format!(
+            "#[derive(Debug, Clone, Serialize, Deserialize)]\npub struct {} {{\n{}\n}}",
+            name,
+            fields.join(",\n")
+        ))
     }
 
     /// Generate constructor
@@ -478,7 +530,7 @@ impl TypeScriptObject for HashMap<String, Any> {
         }
 
         if has_string_values {
-            // Generate enum with string values using const
+            // Generate enum with string values - create both const and enum
             let mut const_definitions = Vec::new();
             let mut enum_variants = Vec::new();
 
@@ -491,6 +543,7 @@ impl TypeScriptObject for HashMap<String, Any> {
                                 "pub const {}: &str = \"{}\";",
                                 variant_name, s
                             ));
+                            enum_variants.push(format!("    {}", variant_name));
                         }
                         _ => {
                             enum_variants.push(format!("    {}", variant_name));
@@ -765,6 +818,21 @@ impl TypeScriptObject for HashMap<String, Any> {
         }
     }
 
+    /// Generate unary expression
+    fn generate_unary_expression(&mut self, unary: &UnaryExpression) -> Result<String> {
+        let argument = self.generate_expression(&unary.argument)?;
+        match unary.operator {
+            Token::Keyword(crate::lexer::Keyword::Typeof) => {
+                // For typeof operator, we'll generate a runtime type check
+                Ok(format!("get_type_of({})", argument))
+            }
+            Token::Not => Ok(format!("!{}", argument)),
+            Token::Minus => Ok(format!("-{}", argument)),
+            Token::Plus => Ok(format!("+{}", argument)),
+            _ => Ok(format!("// TODO: Implement unary operator {:?}", unary.operator)),
+        }
+    }
+
     /// Generate literal
     fn generate_literal(&self, literal: &Literal) -> Result<String> {
         match literal {
@@ -785,12 +853,6 @@ impl TypeScriptObject for HashMap<String, Any> {
         Ok(format!("({} {} {})", left, operator, right))
     }
 
-    /// Generate unary expression
-    fn generate_unary_expression(&mut self, unary: &UnaryExpression) -> Result<String> {
-        let argument = self.generate_expression(&unary.argument)?;
-        let operator = self.map_operator(&unary.operator)?;
-        Ok(format!("{}{}", operator, argument))
-    }
 
     /// Generate assignment expression
     fn generate_assignment_expression(&mut self, assignment: &AssignmentExpression) -> Result<String> {

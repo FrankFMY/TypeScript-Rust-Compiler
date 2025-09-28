@@ -14,6 +14,16 @@ pub struct TypeMapper {
     runtime: bool,
 }
 
+/// Extract struct name from generated code
+fn extract_struct_name(code: &str) -> String {
+    if let Some(start) = code.find("struct ") {
+        if let Some(end) = code[start + 7..].find(" {") {
+            return code[start + 7..start + 7 + end].to_string();
+        }
+    }
+    "Unknown".to_string()
+}
+
 impl TypeMapper {
     /// Create a new type mapper
     pub fn new(runtime: bool) -> Self {
@@ -112,8 +122,10 @@ impl TypeMapper {
                 
                 // Check if both types are object types
                 if left_type.starts_with("#[derive") && right_type.starts_with("#[derive") {
-                    // Generate a combined struct
-                    Ok(format!("CombinedObject"))
+                    // Extract struct names and create a combined type
+                    let left_struct = extract_struct_name(&left_type);
+                    let right_struct = extract_struct_name(&right_type);
+                    Ok(format!("{}And{}", left_struct, right_struct))
                 } else {
                     Ok(format!("Intersection<{}, {}>", left_type, right_type))
                 }
