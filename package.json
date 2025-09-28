@@ -1,0 +1,55 @@
+{
+	"name": "ts2rs",
+	"version": "0.1.0",
+	"description": "High-performance TypeScript to Rust compiler",
+	"main": "index.js",
+	"bin": {
+		"ts2rs": "./bin/ts2rs"
+	},
+	"scripts": {
+		"build": "cargo build --release",
+		"test": "cargo test",
+		"install": "cargo build --release && cp target/release/ts2rs bin/",
+		"prepublishOnly": "cargo build --release"
+	},
+	"keywords": [
+		"typescript",
+		"rust",
+		"compiler",
+		"transpiler",
+		"typescript-to-rust",
+		"ts2rs"
+	],
+	"author": "FrankFMY <pryanishnikovartem@gmail.com>",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/FrankFMY/TypeScript-Rust-Compiler.git"
+	},
+	"bugs": {
+		"url": "https://github.com/FrankFMY/TypeScript-Rust-Compiler/issues"
+	},
+	"homepage": "https://github.com/FrankFMY/TypeScript-Rust-Compiler#readme",
+	"engines": {
+		"node": ">=14.0.0"
+	},
+	"os": [
+		"win32",
+		"darwin",
+		"linux"
+	],
+	"cpu": [
+		"x64",
+		"arm64"
+	],
+	"files": [
+		"bin/",
+		"README.md",
+		"LICENSE",
+		"examples/"
+	],
+	"preferGlobal": true,
+	"publishConfig": {
+		"access": "public"
+	}
+}

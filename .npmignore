@@ -1,0 +1,39 @@
+# Rust build artifacts
+target/
+Cargo.lock
+*.pdb
+*.exe
+
+# Development files
+.git/
+.gitignore
+.cargo/
+.vscode/
+.idea/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Tests
+tests/
+test_*
+
+# Temporary files
+*.tmp
+*.log
+*.bak
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+*.swp
+*.swo
+*~
+
+# Rust source (only include compiled binary)
+src/
+Cargo.toml
