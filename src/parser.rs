@@ -737,7 +737,18 @@ impl Parser {
             }
             Token::Keyword(crate::lexer::Keyword::This) => {
                 self.advance();
-                Ok(Expression::This(ThisExpression))
+                // Check for dot notation: this.prop
+                if self.current_token() == &Token::Dot {
+                    self.advance(); // consume '.'
+                    let property = self.expect_identifier()?;
+                    Ok(Expression::Member(MemberExpression {
+                        object: Box::new(Expression::This(ThisExpression)),
+                        property: Box::new(Expression::Identifier(property)),
+                        computed: false,
+                    }))
+                } else {
+                    Ok(Expression::This(ThisExpression))
+                }
             }
             Token::Keyword(crate::lexer::Keyword::Super) => {
                 self.advance();

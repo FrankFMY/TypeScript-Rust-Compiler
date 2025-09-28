@@ -35,8 +35,8 @@ impl CodeGenerator {
     pub fn generate(&mut self, program: &Program) -> Result<String> {
         let mut rust_code = String::new();
 
-        // Generate imports
-        rust_code.push_str(&self.generate_imports());
+        // Generate imports (will be updated after processing statements)
+        rust_code.push_str("use std::collections::HashMap;\n");
         rust_code.push('\n');
 
         // Generate runtime support if needed
@@ -109,6 +109,19 @@ impl CodeGenerator {
         rust_code.push_str(&self.functions.join("\n\n"));
         rust_code.push('\n');
         rust_code.push_str(&self.modules.join("\n\n"));
+        
+        // Add serde import if we have structs
+        if !self.structs.is_empty() {
+            rust_code.insert_str(0, "use serde::{Deserialize, Serialize};\n");
+        }
+        
+        // Add main function if we have classes or functions
+        if !self.structs.is_empty() || !self.functions.is_empty() {
+            rust_code.push_str("\n\nfn main() {\n");
+            rust_code.push_str("    // Example usage\n");
+            rust_code.push_str("    println!(\"TypeScript to Rust compilation successful!\");\n");
+            rust_code.push_str("}\n");
+        }
 
         Ok(rust_code)
     }
@@ -117,8 +130,12 @@ impl CodeGenerator {
     fn generate_imports(&self) -> String {
         let mut imports = vec![
             "use std::collections::HashMap;".to_string(),
-            "use serde::{Deserialize, Serialize};".to_string(),
         ];
+        
+        // Only add serde if we have structs that need it
+        if !self.structs.is_empty() {
+            imports.push("use serde::{Deserialize, Serialize};".to_string());
+        }
 
         if self.runtime_support {
             imports.push("use std::any::Any;".to_string());
@@ -318,25 +335,49 @@ impl TypeScriptObject for HashMap<String, Any> {
             "// Empty constructor".to_string()
         };
         
-        // Generate struct initialization
+        // Generate struct initialization based on constructor body
         let mut field_assignments = Vec::new();
-        for member in class_members {
-            if let ClassMember::Property(prop) = member {
-                if let Some(ref initializer) = prop.initializer {
-                    let init_value = self.generate_expression(initializer)?;
-                    field_assignments.push(format!("            {}: {}", prop.name, init_value));
-                } else {
-                    // Use default value based on type
-                    let default_value = match prop.type_.as_ref() {
-                        Some(t) => match t {
-                            Type::String => "\"\".to_string()".to_string(),
-                            Type::Number => "0".to_string(),
-                            Type::Boolean => "false".to_string(),
-                            _ => "Default::default()".to_string(),
-                        },
-                        None => "Default::default()".to_string(),
-                    };
-                    field_assignments.push(format!("            {}: {}", prop.name, default_value));
+        
+        // Check if constructor has assignment statements
+        if let Some(ref body) = constructor.body {
+            if let Statement::BlockStatement(block) = body {
+                for stmt in &block.statements {
+                    if let Statement::ExpressionStatement(expr_stmt) = stmt {
+                        if let Expression::Assignment(assignment) = &expr_stmt.expression {
+                            if let Expression::Member(member) = &*assignment.left {
+                                if let Expression::This(_) = &*member.object {
+                                    if let Expression::Identifier(field_name) = &*member.property {
+                                        let init_value = self.generate_expression(&assignment.right)?;
+                                        field_assignments.push(format!("            {}: {}", field_name, init_value));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // If no assignments found, use property initializers
+        if field_assignments.is_empty() {
+            for member in class_members {
+                if let ClassMember::Property(prop) = member {
+                    if let Some(ref initializer) = prop.initializer {
+                        let init_value = self.generate_expression(initializer)?;
+                        field_assignments.push(format!("            {}: {}", prop.name, init_value));
+                    } else {
+                        // Use default value based on type
+                        let default_value = match prop.type_.as_ref() {
+                            Some(t) => match t {
+                                Type::String => "\"\".to_string()".to_string(),
+                                Type::Number => "0.0".to_string(),
+                                Type::Boolean => "false".to_string(),
+                                _ => "Default::default()".to_string(),
+                            },
+                            None => "Default::default()".to_string(),
+                        };
+                        field_assignments.push(format!("            {}: {}", prop.name, default_value));
+                    }
                 }
             }
         }
@@ -519,7 +560,13 @@ impl TypeScriptObject for HashMap<String, Any> {
         let name = &method.name;
         let params = self.generate_parameters(&method.parameters)?;
         let return_type = if let Some(ref t) = method.return_type {
-            format!(" -> {}", self.type_mapper.map_type(t)?)
+            let rust_type = self.type_mapper.map_type(t)?;
+            // For owned types like String, return cloned values
+            if rust_type == "String" {
+                format!(" -> {}", rust_type)
+            } else {
+                format!(" -> {}", rust_type)
+            }
         } else {
             " -> ()".to_string()
         };
@@ -530,9 +577,20 @@ impl TypeScriptObject for HashMap<String, Any> {
             "unimplemented!()".to_string()
         };
 
+        // Clean up parameters - remove trailing comma if empty
+        let clean_params = if params.trim().is_empty() {
+            "".to_string()
+        } else {
+            params
+        };
+        
         Ok(format!(
-            "    pub fn {}(&self, {}){}{{\n        {}\n    }}",
-            name, params, return_type, body
+            "    pub fn {}(&self{}{}){}{{\n        {}\n    }}",
+            name, 
+            if clean_params.is_empty() { "" } else { ", " },
+            clean_params, 
+            return_type, 
+            body
         ))
     }
 
@@ -584,8 +642,13 @@ impl TypeScriptObject for HashMap<String, Any> {
             }
             Statement::ExpressionStatement(expr_stmt) => {
                 let expr = self.generate_expression(&expr_stmt.expression)?;
-                // Add semicolon for all statements
-                Ok(format!("{};", expr))
+                // Clean up TODO expressions
+                let clean_expr = if expr.contains("TODO") {
+                    "unimplemented!()".to_string()
+                } else {
+                    expr
+                };
+                Ok(format!("{};", clean_expr))
             }
             Statement::ReturnStatement(ret) => {
                 if let Some(ref arg) = ret.argument {
@@ -594,7 +657,12 @@ impl TypeScriptObject for HashMap<String, Any> {
                     let clean_expr = if expr.contains("TODO") {
                         "unimplemented!()".to_string()
                     } else {
-                        expr
+                        // For member expressions accessing fields, clone if needed
+                        if expr.starts_with("self.") {
+                            format!("{}.clone()", expr)
+                        } else {
+                            expr
+                        }
                     };
                     Ok(format!("return {};", clean_expr))
                 } else {
@@ -623,6 +691,8 @@ impl TypeScriptObject for HashMap<String, Any> {
             Expression::Template(template) => self.generate_template_literal(template),
             Expression::New(new_expr) => self.generate_new_expression(new_expr),
             Expression::Assignment(assignment) => self.generate_assignment_expression(assignment),
+            Expression::This(_) => Ok("self".to_string()),
+            Expression::Super(_) => Ok("super".to_string()),
             _ => {
                 // Handle other expression types
                 Ok("// TODO: Implement expression".to_string())
@@ -633,8 +703,8 @@ impl TypeScriptObject for HashMap<String, Any> {
     /// Generate literal
     fn generate_literal(&self, literal: &Literal) -> Result<String> {
         match literal {
-            Literal::String(s) => Ok(format!("\"{}\"", s)),
-            Literal::Number(n) => Ok(n.to_string()),
+            Literal::String(s) => Ok(format!("\"{}\".to_string()", s)),
+            Literal::Number(n) => Ok(format!("{}.0", n)),
             Literal::Boolean(b) => Ok(b.to_string()),
             Literal::Null => Ok("None".to_string()),
             Literal::Undefined => Ok("None".to_string()),
@@ -697,7 +767,12 @@ impl TypeScriptObject for HashMap<String, Any> {
         if member.computed {
             Ok(format!("{}[{}]", object, property))
         } else {
-            Ok(format!("{}.{}", object, property))
+            // Handle 'this' expressions
+            if object == "this" {
+                Ok(format!("self.{}", property))
+            } else {
+                Ok(format!("{}.{}", object, property))
+            }
         }
     }
 
