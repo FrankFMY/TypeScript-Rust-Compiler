@@ -249,7 +249,20 @@ impl Parser {
             Token::Keyword(crate::lexer::Keyword::Let) => self.parse_variable_declaration()?,
             Token::Keyword(crate::lexer::Keyword::Var) => self.parse_variable_declaration()?,
             Token::Keyword(crate::lexer::Keyword::Enum) => self.parse_enum_declaration()?,
-            Token::Keyword(crate::lexer::Keyword::Type) => self.parse_type_alias()?,
+            Token::Keyword(crate::lexer::Keyword::Type) => {
+                // Check if this is "export type { ... }" or "export type Name = ..."
+                if self.position + 1 < self.tokens.len() {
+                    if let Token::LeftBrace = &self.tokens[self.position + 1] {
+                        // This is "export type { ... }", parse as export type statement
+                        self.parse_export_type_statement()?
+                    } else {
+                        // This is "export type Name = ...", parse as type alias
+                        self.parse_type_alias()?
+                    }
+                } else {
+                    self.parse_type_alias()?
+                }
+            },
             _ => {
                 return Err(CompilerError::parse_error(
                     1,
@@ -260,6 +273,34 @@ impl Parser {
         };
         Ok(Statement::ExportDeclaration(Box::new(ExportDeclaration {
             declaration: Box::new(declaration),
+        })))
+    }
+
+    fn parse_export_type_statement(&mut self) -> Result<Statement> {
+        self.expect_keyword()?; // consume 'type' keyword
+        self.expect_token(&Token::LeftBrace)?; // consume '{'
+        
+        let mut type_names = Vec::new();
+        while self.current_token() != &Token::RightBrace && self.current_token() != &Token::EOF {
+            let name = self.expect_identifier()?;
+            type_names.push(name);
+            
+            if self.current_token() == &Token::Comma {
+                self.advance();
+            }
+        }
+        
+        self.expect_token(&Token::RightBrace)?; // consume '}'
+        self.expect_semicolon()?;
+        
+        // For now, create a simple export statement
+        // In a full implementation, we'd have a proper ExportTypeStatement type
+        Ok(Statement::ExportDeclaration(Box::new(ExportDeclaration {
+            declaration: Box::new(Statement::TypeAlias(TypeAlias {
+                name: "exported_types".to_string(),
+                type_parameters: Vec::new(),
+                type_definition: Type::Any,
+            })),
         })))
     }
 
@@ -1169,8 +1210,24 @@ impl Parser {
     }
 
     fn parse_extends(&mut self) -> Result<Vec<Type>> {
-        // TODO: Implement extends parsing
-        Ok(Vec::new())
+        let mut extends = Vec::new();
+        
+        if self.current_token() == &Token::Keyword(crate::lexer::Keyword::Extends) {
+            self.advance(); // consume 'extends'
+            
+            // Parse the first extended type
+            let type_ = self.parse_type()?;
+            extends.push(type_);
+            
+            // Parse additional extended types (comma-separated)
+            while self.current_token() == &Token::Comma {
+                self.advance(); // consume ','
+                let type_ = self.parse_type()?;
+                extends.push(type_);
+            }
+        }
+        
+        Ok(extends)
     }
 
     fn parse_class_body(&mut self) -> Result<ClassBody> {
@@ -1515,6 +1572,43 @@ impl Parser {
                         "Expected method or property signature".to_string(),
                     ))
                 }
+            }
+            Token::LeftBracket => {
+                // It's an index signature: [key: string]: any;
+                self.advance(); // consume '['
+                let key_name = match self.current_token() {
+                    Token::Identifier(name) => {
+                        let name = name.clone();
+                        self.advance();
+                        name
+                    }
+                    Token::Keyword(crate::lexer::Keyword::Key) => {
+                        self.advance();
+                        "key".to_string()
+                    }
+                    _ => return Err(CompilerError::parse_error(
+                        1, 1,
+                        "Expected identifier or 'key' in index signature".to_string(),
+                    ))
+                };
+                self.expect_token(&Token::Colon)?;
+                let key_type = self.parse_type()?;
+                self.expect_token(&Token::RightBracket)?;
+                self.expect_token(&Token::Colon)?;
+                let value_type = self.parse_type()?;
+                self.expect_token(&Token::Semicolon)?;
+
+                Ok(ObjectTypeMember::Index(IndexSignature {
+                    parameter: Box::new(Parameter {
+                        name: key_name,
+                        type_: Some(Box::new(key_type)),
+                        optional: false,
+                        initializer: None,
+                        rest: false,
+                    }),
+                    type_: value_type,
+                    readonly: false,
+                }))
             }
             _ => Err(CompilerError::parse_error(
                 1,
