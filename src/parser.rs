@@ -651,6 +651,10 @@ impl Parser {
                 self.advance();
                 Ok(Expression::This(ThisExpression))
             }
+            Token::Keyword(crate::lexer::Keyword::Super) => {
+                self.advance();
+                Ok(Expression::Super(SuperExpression))
+            }
             Token::Keyword(crate::lexer::Keyword::New) => {
                 self.advance();
                 let callee = self.parse_primary_expression()?;
@@ -1460,13 +1464,18 @@ impl Parser {
                     ));
                 };
 
+                // Handle getter parameters (empty parentheses)
+                if self.current_token() == &Token::LeftParen {
+                    self.advance(); // consume '('
+                    self.expect_token(&Token::RightParen)?; // consume ')'
+                }
+
                 let return_type = if self.current_token() == &Token::Colon {
                     self.advance();
                     Some(self.parse_type()?)
                 } else {
                     None
                 };
-
                 let body = if self.current_token() == &Token::LeftBrace {
                     self.parse_block_statement()?
                 } else {
@@ -1499,16 +1508,19 @@ impl Parser {
                 };
 
                 let parameter = if self.current_token() == &Token::LeftParen {
-                    self.advance();
-                    let parameters = self.parse_parameters()?;
-                    if parameters.len() != 1 {
-                        return Err(CompilerError::parse_error(
-                            1,
-                            1,
-                            "Setter must have exactly one parameter".to_string(),
-                        ));
+                    self.advance(); // consume '('
+                    let name = self.expect_identifier()?;
+                    self.expect_token(&Token::Colon)?;
+                    let type_annotation = self.parse_type()?;
+                    self.expect_token(&Token::RightParen)?; // consume ')'
+                    
+                    Parameter {
+                        name,
+                        optional: false,
+                        type_: Some(Box::new(type_annotation)),
+                        initializer: None,
+                        rest: false,
                     }
-                    parameters[0].clone()
                 } else {
                     return Err(CompilerError::parse_error(
                         1,
@@ -1537,8 +1549,18 @@ impl Parser {
             Token::Identifier(name) => {
                 self.advance();
 
-                // Check if it's a method or property
-                if self.current_token() == &Token::LeftParen {
+                // Special handling for constructor
+                if name == "constructor" {
+                    // It's a constructor
+                    let parameters = self.parse_parameters()?;
+                    let body = self.parse_block_statement()?;
+
+                    Ok(ClassMember::Constructor(ConstructorDeclaration {
+                        parameters,
+                        body: Some(body),
+                        modifiers,
+                    }))
+                } else if self.current_token() == &Token::LeftParen {
                     // It's a method
                     let parameters = self.parse_parameters()?;
                     let return_type = if self.current_token() == &Token::Colon {

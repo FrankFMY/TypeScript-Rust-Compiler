@@ -1,0 +1,28 @@
+use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BasicClass {
+    pub publicProp: String,
+    pub privateProp: String,
+    pub protectedProp: String,
+    pub readonlyProp: String
+}
+
+
+impl BasicClass {
+    pub fn constructor(&self, ) -> (){
+        // TODO: Implement expression;
+    }
+    pub fn publicMethod(&self, ) -> String{
+        return // TODO: Implement expression.publicProp;
+    }
+    pub fn privateMethod(&self, ) -> String{
+        return // TODO: Implement expression.privateProp;
+    }
+    pub fn protectedMethod(&self, ) -> bool{
+        return true;
+    }
+    pub fn staticMethod(&self, ) -> String{
+        return "static";
+    }
+}
