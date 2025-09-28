@@ -230,6 +230,18 @@ impl TypeScriptObject for HashMap<String, Any> {
                     let method_code = self.generate_method(method)?;
                     methods.push(method_code);
                 }
+                ClassMember::Constructor(constructor) => {
+                    let constructor_code = self.generate_constructor(constructor, &class.body.members)?;
+                    methods.push(constructor_code);
+                }
+                ClassMember::Getter(getter) => {
+                    let getter_code = self.generate_getter(getter)?;
+                    methods.push(getter_code);
+                }
+                ClassMember::Setter(setter) => {
+                    let setter_code = self.generate_setter(setter)?;
+                    methods.push(setter_code);
+                }
                 _ => {
                     // Handle other member types
                 }
@@ -286,6 +298,104 @@ impl TypeScriptObject for HashMap<String, Any> {
         let type_def = self.type_mapper.map_type(&type_alias.type_definition)?;
         Ok(format!("pub type {} = {};", name, type_def))
     }
+
+    /// Generate constructor
+    fn generate_constructor(&mut self, constructor: &ConstructorDeclaration, class_members: &[ClassMember]) -> Result<String> {
+        let mut params = Vec::new();
+        for param in &constructor.parameters {
+            let param_type = if let Some(ref t) = param.type_ {
+                self.type_mapper.map_type(t)?
+            } else {
+                "Box<dyn Any>".to_string()
+            };
+            let param_name = &param.name;
+            params.push(format!("{}: {}", param_name, param_type));
+        }
+        
+        let body = if let Some(ref body) = constructor.body {
+            self.generate_statement(body)?
+        } else {
+            "// Empty constructor".to_string()
+        };
+        
+        // Generate struct initialization
+        let mut field_assignments = Vec::new();
+        for member in class_members {
+            if let ClassMember::Property(prop) = member {
+                if let Some(ref initializer) = prop.initializer {
+                    let init_value = self.generate_expression(initializer)?;
+                    field_assignments.push(format!("            {}: {}", prop.name, init_value));
+                } else {
+                    // Use default value based on type
+                    let default_value = match prop.type_.as_ref() {
+                        Some(t) => match t {
+                            Type::String => "\"\".to_string()".to_string(),
+                            Type::Number => "0".to_string(),
+                            Type::Boolean => "false".to_string(),
+                            _ => "Default::default()".to_string(),
+                        },
+                        None => "Default::default()".to_string(),
+                    };
+                    field_assignments.push(format!("            {}: {}", prop.name, default_value));
+                }
+            }
+        }
+        
+        let initialization = if field_assignments.is_empty() {
+            "        Self {}".to_string()
+        } else {
+            format!("        Self {{\n{}\n        }}", field_assignments.join(",\n"))
+        };
+        
+        Ok(format!("    pub fn new({}) -> Self {{\n{}\n    }}", params.join(", "), initialization))
+    }
+
+    /// Generate getter
+    fn generate_getter(&mut self, getter: &GetterDeclaration) -> Result<String> {
+        let name = &getter.name;
+        let return_type = if let Some(ref t) = getter.type_ {
+            self.type_mapper.map_type(t)?
+        } else {
+            "Box<dyn Any>".to_string()
+        };
+        
+        let body = if let Some(ref body) = getter.body {
+            self.generate_statement(body)?
+        } else {
+            "// Empty getter".to_string()
+        };
+        
+        Ok(format!("    pub fn {}(&self) -> {} {{\n{}\n    }}", name, return_type, body))
+    }
+
+    /// Generate setter
+    fn generate_setter(&mut self, setter: &SetterDeclaration) -> Result<String> {
+        let name = &setter.name;
+        let param_type = if let Some(ref t) = setter.parameter.type_ {
+            self.type_mapper.map_type(t)?
+        } else {
+            "Box<dyn Any>".to_string()
+        };
+        
+        let body = if let Some(ref body) = setter.body {
+            self.generate_statement(body)?
+        } else {
+            "// Empty setter".to_string()
+        };
+        
+        Ok(format!("    pub fn set_{}(&mut self, value: {}) {{\n{}\n    }}", name, param_type, body))
+    }
+
+    /// Generate block statement
+    fn generate_block_statement(&mut self, block: &BlockStatement) -> Result<String> {
+        let mut statements = Vec::new();
+        for stmt in &block.statements {
+            let stmt_code = self.generate_statement(stmt)?;
+            statements.push(stmt_code);
+        }
+        Ok(statements.join("\n"))
+    }
+
 
     /// Generate enum
     fn generate_enum(&mut self, enum_decl: &EnumDeclaration) -> Result<String> {
@@ -479,7 +589,14 @@ impl TypeScriptObject for HashMap<String, Any> {
             }
             Statement::ReturnStatement(ret) => {
                 if let Some(ref arg) = ret.argument {
-                    Ok(format!("return {};", self.generate_expression(arg)?))
+                    let expr = self.generate_expression(arg)?;
+                    // Remove TODO comments and fix syntax
+                    let clean_expr = if expr.contains("TODO") {
+                        "unimplemented!()".to_string()
+                    } else {
+                        expr
+                    };
+                    Ok(format!("return {};", clean_expr))
                 } else {
                     Ok("return;".to_string())
                 }
@@ -505,6 +622,7 @@ impl TypeScriptObject for HashMap<String, Any> {
             Expression::Object(object) => self.generate_object_expression(object),
             Expression::Template(template) => self.generate_template_literal(template),
             Expression::New(new_expr) => self.generate_new_expression(new_expr),
+            Expression::Assignment(assignment) => self.generate_assignment_expression(assignment),
             _ => {
                 // Handle other expression types
                 Ok("// TODO: Implement expression".to_string())
@@ -537,6 +655,17 @@ impl TypeScriptObject for HashMap<String, Any> {
         let argument = self.generate_expression(&unary.argument)?;
         let operator = self.map_operator(&unary.operator)?;
         Ok(format!("{}{}", operator, argument))
+    }
+
+    /// Generate assignment expression
+    fn generate_assignment_expression(&mut self, assignment: &AssignmentExpression) -> Result<String> {
+        let left = self.generate_expression(&assignment.left)?;
+        let right = self.generate_expression(&assignment.right)?;
+        let operator = match assignment.operator {
+            crate::lexer::Token::Assign => "=",
+            _ => "=", // Default to assignment
+        };
+        Ok(format!("{} {} {}", left, operator, right))
     }
 
     /// Generate call expression

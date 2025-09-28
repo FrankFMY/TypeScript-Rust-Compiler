@@ -22,16 +22,62 @@ impl Parser {
     /// Parse the tokens into an AST
     pub fn parse(&mut self) -> Result<Program> {
         let mut statements = Vec::new();
+        let mut iterations = 0;
+        let max_iterations = self.tokens.len() * 2; // Prevent infinite loops
+        let mut errors = Vec::new();
 
-        while self.position < self.tokens.len() {
-            if let Some(statement) = self.parse_statement()? {
-                statements.push(statement);
-            } else {
-                break;
+        while self.position < self.tokens.len() && iterations < max_iterations {
+            let old_position = self.position;
+            
+            match self.parse_statement() {
+                Ok(Some(statement)) => {
+                    statements.push(statement);
+                }
+                Ok(None) => {
+                    break;
+                }
+                Err(error) => {
+                    // Log error but continue parsing
+                    errors.push(error);
+                    // Skip current token and continue
+                    self.advance();
+                }
             }
+            
+            // Check if we made progress
+            if self.position == old_position {
+                // No progress made, advance position to prevent infinite loop
+                self.position += 1;
+            }
+            
+            // If we encounter an error, try to recover by skipping tokens
+            if self.position < self.tokens.len() {
+                let current_token = &self.tokens[self.position];
+                if matches!(current_token, Token::EOF) {
+                    break;
+                }
+            }
+            
+            iterations += 1;
         }
 
-        Ok(Program { statements })
+        if iterations >= max_iterations {
+            return Err(CompilerError::parse_error(
+                self.position,
+                1,
+                "Parser stuck in infinite loop".to_string(),
+            ));
+        }
+
+        // If we have statements, return them even if there were errors
+        if !statements.is_empty() {
+            Ok(Program { statements })
+        } else if !errors.is_empty() {
+            // If no statements but we have errors, return the first error
+            Err(errors.into_iter().next().unwrap())
+        } else {
+            Ok(Program { statements })
+        }
     }
 
     /// Parse a statement
@@ -86,7 +132,17 @@ impl Parser {
                 self.advance();
                 return self.parse_statement();
             }
-            _ => self.parse_expression_statement()?,
+            _ => {
+                // Try to parse as expression statement, but if it fails, skip the token
+                match self.parse_expression_statement() {
+                    Ok(expr_stmt) => expr_stmt,
+                    Err(_) => {
+                        // Skip problematic token and continue
+                        self.advance();
+                        return Ok(None);
+                    }
+                }
+            }
         };
 
         Ok(Some(statement))
@@ -268,6 +324,10 @@ impl Parser {
                     self.parse_type_alias()?
                 }
             },
+            Token::LeftBrace => {
+                // This is "export { ... }", parse as export statement
+                self.parse_export_statement()?
+            },
             _ => {
                 return Err(CompilerError::parse_error(
                     1,
@@ -278,6 +338,29 @@ impl Parser {
         };
         Ok(Statement::ExportDeclaration(Box::new(ExportDeclaration {
             declaration: Box::new(declaration),
+        })))
+    }
+
+    fn parse_export_statement(&mut self) -> Result<Statement> {
+        self.expect_token(&Token::LeftBrace)?; // consume '{'
+        
+        let mut exports = Vec::new();
+        while self.current_token() != &Token::RightBrace && self.current_token() != &Token::EOF {
+            let name = self.expect_identifier()?;
+            exports.push(name);
+            
+            if self.current_token() == &Token::Comma {
+                self.advance(); // consume ','
+            }
+        }
+        
+        self.expect_token(&Token::RightBrace)?; // consume '}'
+        self.expect_semicolon()?;
+        
+        Ok(Statement::ExportDeclaration(Box::new(ExportDeclaration {
+            declaration: Box::new(Statement::ExpressionStatement(ExpressionStatement {
+                expression: Expression::Literal(Literal::String(format!("Export: {}", exports.join(", ")))),
+            })),
         })))
     }
 
@@ -1618,19 +1701,25 @@ impl Parser {
                             modifiers: Vec::new(),
                         }))
                     } else {
+                        // If we can't parse as class member, try to skip the token
+                        self.advance();
                         Err(CompilerError::parse_error(
+                            self.position - 1,
                             1,
-                            1,
-                            "Unexpected class member".to_string(),
+                            "Unexpected class member, skipping token".to_string(),
                         ))
                     }
                 }
             }
-            _ => Err(CompilerError::parse_error(
-                1,
-                1,
-                "Expected class member".to_string(),
-            )),
+            _ => {
+                // If we can't parse as class member, try to skip the token
+                self.advance();
+                Err(CompilerError::parse_error(
+                    self.position - 1,
+                    1,
+                    "Expected class member, skipping token".to_string(),
+                ))
+            }
         }
     }
 

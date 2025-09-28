@@ -205,7 +205,6 @@ impl Lexer {
         while self.position < self.input.len() {
             match self.next_token()? {
                 Some(token) => {
-                    println!("Token: {:?}", token);
                     tokens.push(token);
                 }
                 None => break,
