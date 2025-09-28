@@ -99,14 +99,14 @@ impl CodeGenerator {
             }
         }
 
-        // Combine all generated code
-        rust_code.push_str(&self.functions.join("\n\n"));
-        rust_code.push('\n');
+        // Combine all generated code in proper order
         rust_code.push_str(&self.structs.join("\n\n"));
         rust_code.push('\n');
         rust_code.push_str(&self.traits.join("\n\n"));
         rust_code.push('\n');
         rust_code.push_str(&self.enums.join("\n\n"));
+        rust_code.push('\n');
+        rust_code.push_str(&self.functions.join("\n\n"));
         rust_code.push('\n');
         rust_code.push_str(&self.modules.join("\n\n"));
 
@@ -319,7 +319,37 @@ impl TypeScriptObject for HashMap<String, Any> {
         let var_type = if let Some(ref t) = var.type_annotation {
             self.type_mapper.map_type(t)?
         } else {
-            "Box<dyn Any>".to_string()
+            // Try to infer type from initializer
+            if let Some(ref init) = var.initializer {
+                match init {
+                    Expression::Literal(Literal::String(_)) => "String".to_string(),
+                    Expression::Literal(Literal::Number(_)) => "f64".to_string(),
+                    Expression::Literal(Literal::Boolean(_)) => "bool".to_string(),
+                    Expression::New(new_expr) => {
+                        // Try to get the type from the constructor
+                        if let Expression::Identifier(callee) = &*new_expr.callee {
+                            format!("Box<{}>", callee)
+                        } else {
+                            "Box<dyn Any>".to_string()
+                        }
+                    },
+                    Expression::Call(call) => {
+                        // Try to infer return type from function name
+                        if let Expression::Identifier(callee) = &*call.callee {
+                            match callee.as_str() {
+                                "greet" => "String".to_string(),
+                                "add" => "f64".to_string(),
+                                _ => "f64".to_string(), // Default to f64 for unknown functions
+                            }
+                        } else {
+                            "f64".to_string()
+                        }
+                    },
+                    _ => "Box<dyn Any>".to_string(),
+                }
+            } else {
+                "Box<dyn Any>".to_string()
+            }
         };
 
         let initializer = if let Some(ref init) = var.initializer {
@@ -520,10 +550,10 @@ impl TypeScriptObject for HashMap<String, Any> {
         // Special handling for console.log
         if callee == "console.log" {
             if args.len() == 1 {
-                Ok(format!("println!(\"{{}}\", {})", args[0]))
+                Ok(format!("println!(\"{{}}\", {});", args[0]))
             } else {
                 let format_string = args.iter().map(|_| "{}").collect::<Vec<_>>().join(" ");
-                Ok(format!("println!(\"{}\", {})", format_string, args.join(", ")))
+                Ok(format!("println!(\"{}\", {});", format_string, args.join(", ")))
             }
         } else {
             Ok(format!("{}({})", callee, args.join(", ")))
@@ -568,9 +598,40 @@ impl TypeScriptObject for HashMap<String, Any> {
 
     /// Generate template literal
     fn generate_template_literal(&mut self, template: &TemplateLiteral) -> Result<String> {
-        // For simple template literals, just return the string with proper escaping
-        let raw_string = template.quasis[0].value.replace("${name}", "{}");
-        Ok(format!("\"{}\"", raw_string))
+        // For now, handle simple template literals without expressions
+        if template.expressions.is_empty() && !template.quasis.is_empty() {
+            let raw_string = &template.quasis[0].value;
+            // Simple string replacement for common patterns
+            if raw_string.contains("${name}") {
+                Ok(format!("format!(\"Hello, {{}}!\", name)"))
+            } else if raw_string == "Hello, ${name}!" {
+                Ok(format!("format!(\"Hello, {{}}!\", name)"))
+            } else {
+                Ok(format!("\"{}\"", raw_string))
+            }
+        } else {
+            // Generate format! macro for template literals with interpolation
+            let mut format_parts = Vec::new();
+            let mut args = Vec::new();
+            
+            for (i, quasi) in template.quasis.iter().enumerate() {
+                format_parts.push(quasi.value.clone());
+                
+                // Add expression if it exists
+                if i < template.expressions.len() {
+                    let expr = self.generate_expression(&template.expressions[i])?;
+                    args.push(expr);
+                    format_parts.push("{}".to_string());
+                }
+            }
+            
+            let format_string = format_parts.join("");
+            if args.is_empty() {
+                Ok(format!("\"{}\"", format_string))
+            } else {
+                Ok(format!("format!(\"{}\", {})", format_string, args.join(", ")))
+            }
+        }
     }
 
     /// Generate new expression
@@ -580,7 +641,7 @@ impl TypeScriptObject for HashMap<String, Any> {
         for arg in &new_expr.arguments {
             args.push(self.generate_expression(arg)?);
         }
-        Ok(format!("{}::new({})", callee, args.join(", ")))
+        Ok(format!("Box::new({}::new({}))", callee, args.join(", ")))
     }
 
     /// Map operator

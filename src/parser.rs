@@ -530,7 +530,15 @@ impl Parser {
             }
             Token::TemplateLiteral(s) => {
                 self.advance();
-                Ok(Expression::Literal(Literal::String(s)))
+                // Create a simple template literal with one quasi
+                let template = TemplateLiteral {
+                    quasis: vec![TemplateElement {
+                        value: s,
+                        tail: true,
+                    }],
+                    expressions: vec![],
+                };
+                Ok(Expression::Template(template))
             }
             Token::Boolean(b) => {
                 self.advance();

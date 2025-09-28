@@ -514,6 +514,23 @@ impl Lexer {
                     });
                     self.advance();
                 }
+            } else if ch == '$' && self.position + 1 < self.input.len() && self.input.chars().nth(self.position + 1) == Some('{') {
+                // Handle ${} interpolation - include the full ${} in the string for now
+                value.push('$');
+                self.advance();
+                if self.position < self.input.len() {
+                    value.push('{');
+                    self.advance();
+                    // Skip to closing brace
+                    while self.position < self.input.len() && self.current_char() != '}' {
+                        value.push(self.current_char());
+                        self.advance();
+                    }
+                    if self.position < self.input.len() {
+                        value.push('}');
+                        self.advance();
+                    }
+                }
             } else {
                 value.push(ch);
                 self.advance();
