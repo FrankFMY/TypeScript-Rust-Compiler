@@ -864,8 +864,9 @@ impl Parser {
             }
             Token::Keyword(crate::lexer::Keyword::Keyof) => {
                 self.advance();
-                let _target_type = self.parse_primary_type()?;
-                Ok(Type::String) // keyof T -> string for now
+                let _target_type = self.parse_type()?;
+                // For now, return string as keyof T resolves to string
+                Ok(Type::String)
             }
             Token::Keyword(crate::lexer::Keyword::Key) => {
                 self.advance();
@@ -885,8 +886,14 @@ impl Parser {
             }
             Token::Identifier(name) => {
                 self.advance();
-                // Check for generic type parameters
-                if self.current_token() == &Token::LessThan {
+                // Check for indexed access type: T[K]
+                if self.current_token() == &Token::LeftBracket {
+                    self.advance(); // consume [
+                    let _index_type = self.parse_type()?;
+                    self.expect_token(&Token::RightBracket)?;
+                    // For now, return the base type (indexed access is handled at runtime)
+                    Ok(Type::Named(name.to_string()))
+                } else if self.current_token() == &Token::LessThan {
                     let type_parameters = self.parse_type_parameters()?;
                     Ok(Type::GenericNamed {
                         name: name.to_string(),
@@ -896,6 +903,16 @@ impl Parser {
                     Ok(Type::Named(name.to_string()))
                 }
             }
+            Token::String(s) => {
+                self.advance();
+                // String literal type
+                Ok(Type::Named(format!("\"{}\"", s)))
+            }
+            Token::Number(n) => {
+                self.advance();
+                // Number literal type
+                Ok(Type::Named(n.to_string()))
+            }
             Token::LeftParen => {
                 self.advance();
                 let type_ = self.parse_type()?;
@@ -903,35 +920,71 @@ impl Parser {
                 Ok(type_)
             }
        Token::LeftBrace => {
-           // Parse object type: { prop: type; ... }
+           // Parse object type: { prop: type; ... } or mapped type { [P in K]: T }
            self.advance(); // consume {
            let mut members = Vec::new();
 
            while self.current_token() != &Token::RightBrace && self.current_token() != &Token::EOF {
-               // Check for readonly modifier
-               let readonly = if self.current_token() == &Token::Keyword(Keyword::Readonly) {
-                   self.advance(); // consume readonly
-                   true
+               // Check if this is a mapped type: [P in K] or index signature: [key: type]
+               if self.current_token() == &Token::LeftBracket {
+                   // Look ahead to determine if this is a mapped type or index signature
+                   let mut pos = self.position + 1; // skip [
+                   let mut is_mapped_type = false;
+                   
+                   // Look for 'in' keyword to distinguish mapped type from index signature
+                   while pos < self.tokens.len() && self.tokens[pos] != Token::RightBracket {
+                       if self.tokens[pos] == Token::Keyword(Keyword::In) {
+                           is_mapped_type = true;
+                           break;
+                       }
+                       pos += 1;
+                   }
+                   
+                   if is_mapped_type {
+                       let mapped_type = self.parse_mapped_type()?;
+                       members.push(ObjectTypeMember::Property(PropertySignature {
+                           name: mapped_type.type_parameter.name.clone(),
+                           optional: false,
+                           type_: Some(*mapped_type.type_.clone()),
+                           readonly: mapped_type.readonly.unwrap_or(false),
+                       }));
+                       // parse_mapped_type already handles semicolon, so continue to next iteration
+                       continue;
+                   } else {
+                       // This is an index signature, parse it as such
+                       let index_sig = self.parse_index_signature()?;
+                       members.push(ObjectTypeMember::Index(index_sig));
+                       if self.current_token() == &Token::Semicolon {
+                           self.advance();
+                       }
+                       continue;
+                   }
                } else {
-                   false
-               };
+                   // Check for readonly modifier
+                   let readonly = if self.current_token() == &Token::Keyword(Keyword::Readonly) {
+                       self.advance(); // consume readonly
+                       true
+                   } else {
+                       false
+                   };
 
-               let name = self.expect_identifier()?;
-               let optional = if self.current_token() == &Token::QuestionMark {
-                   self.advance();
-                   true
-               } else {
-                   false
-               };
-               self.expect_token(&Token::Colon)?;
-               let type_ = self.parse_type()?;
+                   let name = self.expect_identifier()?;
+                   let optional = if self.current_token() == &Token::QuestionMark {
+                       self.advance();
+                       true
+                   } else {
+                       false
+                   };
+                   self.expect_token(&Token::Colon)?;
+                   let type_ = self.parse_type()?;
 
-               members.push(ObjectTypeMember::Property(PropertySignature {
-                   name,
-                   optional,
-                   type_: Some(type_),
-                   readonly,
-               }));
+                   members.push(ObjectTypeMember::Property(PropertySignature {
+                       name,
+                       optional,
+                       type_: Some(type_),
+                       readonly,
+                   }));
+               }
 
                if self.current_token() == &Token::Semicolon {
                    self.advance();
@@ -1361,6 +1414,7 @@ impl Parser {
     }
 
     fn parse_class_member(&mut self) -> Result<ClassMember> {
+        println!("DEBUG: parse_class_member - starting, current token: {:?}", self.current_token());
         let mut modifiers = Vec::new();
         
         // Parse access modifiers
@@ -1380,6 +1434,10 @@ impl Parser {
                 }
                 crate::lexer::Keyword::Readonly => {
                     modifiers.push(crate::ast::Modifier::Readonly);
+                    self.advance();
+                }
+                crate::lexer::Keyword::Static => {
+                    modifiers.push(crate::ast::Modifier::Static);
                     self.advance();
                 }
                 _ => break,
@@ -1696,5 +1754,109 @@ impl Parser {
     fn parse_property_key(&mut self) -> Result<Expression> {
         // TODO: Implement property key parsing
         self.parse_expression()
+    }
+
+    /// Parse index signature: [key: type]: returnType
+    fn parse_index_signature(&mut self) -> Result<IndexSignature> {
+        self.expect_token(&Token::LeftBracket)?;
+        
+        let key_name = match self.current_token() {
+            Token::Identifier(name) => {
+                let name = name.clone();
+                self.advance();
+                name
+            }
+            Token::Keyword(Keyword::Key) => {
+                self.advance();
+                "key".to_string()
+            }
+            _ => {
+                return Err(CompilerError::parse_error(
+                    self.position,
+                    0,
+                    format!("Expected identifier or 'key', found {:?}", self.current_token()),
+                ));
+            }
+        };
+        
+        self.expect_token(&Token::Colon)?;
+        let key_type = self.parse_type()?;
+        self.expect_token(&Token::RightBracket)?;
+        self.expect_token(&Token::Colon)?;
+        let value_type = self.parse_type()?;
+        
+        Ok(IndexSignature {
+            parameter: Box::new(Parameter {
+                name: key_name,
+                type_: Some(Box::new(key_type)),
+                optional: false,
+                initializer: None,
+                rest: false,
+            }),
+            type_: value_type,
+            readonly: false,
+        })
+    }
+
+    /// Parse mapped type: [P in K] or [P in keyof T]
+    fn parse_mapped_type(&mut self) -> Result<MappedType> {
+        // Parse [P in K]: T
+        self.expect_token(&Token::LeftBracket)?;
+        
+        let type_parameter_name = match self.current_token() {
+            Token::Identifier(name) => {
+                let name = name.clone();
+                self.advance();
+                name
+            }
+            Token::Keyword(Keyword::Key) => {
+                self.advance();
+                "Key".to_string()
+            }
+            _ => {
+                return Err(CompilerError::parse_error(
+                    self.position,
+                    0,
+                    format!("Expected identifier or Key, found {:?}", self.current_token()),
+                ));
+            }
+        };
+        let type_parameter = TypeParameter {
+            name: type_parameter_name.clone(),
+            constraint: None,
+            default: None,
+        };
+
+        // Expect 'in' keyword
+        if self.current_token() == &Token::Keyword(Keyword::In) {
+            self.advance();
+        } else {
+            return Err(CompilerError::parse_error(
+                self.position,
+                0,
+                format!("Expected 'in', found {:?}", self.current_token()),
+            ));
+        }
+        
+        let constraint_type = self.parse_type()?;
+        
+        self.expect_token(&Token::RightBracket)?;
+        self.expect_token(&Token::Colon)?;
+        
+        let value_type = self.parse_type()?;
+        
+        // Skip semicolon if present (it's optional in mapped types)
+        if self.current_token() == &Token::Semicolon {
+            self.advance();
+        }
+        
+        Ok(MappedType {
+            type_parameter: Box::new(type_parameter),
+            constraint: Some(Box::new(constraint_type)),
+            name_type: None,
+            type_: Box::new(value_type),
+            readonly: None,
+            optional: None,
+        })
     }
 }
