@@ -1414,7 +1414,6 @@ impl Parser {
     }
 
     fn parse_class_member(&mut self) -> Result<ClassMember> {
-        println!("DEBUG: parse_class_member - starting, current token: {:?}", self.current_token());
         let mut modifiers = Vec::new();
         
         // Parse access modifiers
@@ -1447,6 +1446,94 @@ impl Parser {
         let token = self.current_token().clone();
 
         match token {
+            Token::Keyword(crate::lexer::Keyword::Get) => {
+                self.advance();
+                let name = if let Token::Identifier(name) = self.current_token() {
+                    let name = name.clone();
+                    self.advance();
+                    name
+                } else {
+                    return Err(CompilerError::parse_error(
+                        1,
+                        1,
+                        "Expected getter name".to_string(),
+                    ));
+                };
+
+                let return_type = if self.current_token() == &Token::Colon {
+                    self.advance();
+                    Some(self.parse_type()?)
+                } else {
+                    None
+                };
+
+                let body = if self.current_token() == &Token::LeftBrace {
+                    self.parse_block_statement()?
+                } else {
+                    return Err(CompilerError::parse_error(
+                        1,
+                        1,
+                        "Expected block statement for getter".to_string(),
+                    ));
+                };
+
+                Ok(ClassMember::Getter(GetterDeclaration {
+                    name,
+                    type_: return_type,
+                    body: Some(body),
+                    modifiers,
+                }))
+            }
+            Token::Keyword(crate::lexer::Keyword::Set) => {
+                self.advance();
+                let name = if let Token::Identifier(name) = self.current_token() {
+                    let name = name.clone();
+                    self.advance();
+                    name
+                } else {
+                    return Err(CompilerError::parse_error(
+                        1,
+                        1,
+                        "Expected setter name".to_string(),
+                    ));
+                };
+
+                let parameter = if self.current_token() == &Token::LeftParen {
+                    self.advance();
+                    let parameters = self.parse_parameters()?;
+                    if parameters.len() != 1 {
+                        return Err(CompilerError::parse_error(
+                            1,
+                            1,
+                            "Setter must have exactly one parameter".to_string(),
+                        ));
+                    }
+                    parameters[0].clone()
+                } else {
+                    return Err(CompilerError::parse_error(
+                        1,
+                        1,
+                        "Expected setter parameter".to_string(),
+                    ));
+                };
+
+                let body = if self.current_token() == &Token::LeftBrace {
+                    self.parse_block_statement()?
+                } else {
+                    return Err(CompilerError::parse_error(
+                        1,
+                        1,
+                        "Expected block statement for setter".to_string(),
+                    ));
+                };
+
+                Ok(ClassMember::Setter(SetterDeclaration {
+                    name,
+                    parameter,
+                    body: Some(body),
+                    modifiers,
+                }))
+            }
             Token::Identifier(name) => {
                 self.advance();
 

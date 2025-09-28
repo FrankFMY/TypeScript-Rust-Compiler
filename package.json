@@ -1,6 +1,6 @@
 {
 	"name": "typescript-rust-compiler",
-	"version": "0.2.6",
+	"version": "0.3.1",
 	"description": "High-performance TypeScript to Rust compiler",
 	"main": "index.js",
 	"bin": {

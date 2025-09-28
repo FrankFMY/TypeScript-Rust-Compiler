@@ -118,6 +118,8 @@ pub enum Keyword {
     Protected,
     Abstract,
     Readonly,
+    Get,
+    Set,
 
     // Async
     Async,
@@ -637,6 +639,8 @@ impl Lexer {
             "protected" => Some(Keyword::Protected),
             "abstract" => Some(Keyword::Abstract),
             "readonly" => Some(Keyword::Readonly),
+            "get" => Some(Keyword::Get),
+            "set" => Some(Keyword::Set),
             "async" => Some(Keyword::Async),
             "await" => Some(Keyword::Await),
             "Promise" => Some(Keyword::Promise),
