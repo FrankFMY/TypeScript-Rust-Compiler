@@ -26,6 +26,8 @@ pub enum Token {
     Modulo,
     Equal,
     NotEqual,
+    StrictEqual,
+    StrictNotEqual,
     LessThan,
     GreaterThan,
     LessEqual,
@@ -269,7 +271,12 @@ impl Lexer {
             '=' => {
                 if self.peek_char() == Some('=') {
                     self.advance();
-                    Ok(Some(Token::Equal))
+                    if self.peek_char() == Some('=') {
+                        self.advance();
+                        Ok(Some(Token::StrictEqual))
+                    } else {
+                        Ok(Some(Token::Equal))
+                    }
                 } else {
                     Ok(Some(Token::Assign))
                 }
@@ -277,7 +284,12 @@ impl Lexer {
             '!' => {
                 if self.peek_char() == Some('=') {
                     self.advance();
-                    Ok(Some(Token::NotEqual))
+                    if self.peek_char() == Some('=') {
+                        self.advance();
+                        Ok(Some(Token::StrictNotEqual))
+                    } else {
+                        Ok(Some(Token::NotEqual))
+                    }
                 } else {
                     Ok(Some(Token::Not))
                 }

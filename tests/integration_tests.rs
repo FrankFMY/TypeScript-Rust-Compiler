@@ -1,7 +1,6 @@
 //! Integration tests for the TS2RS compiler
 
 use std::fs;
-use std::path::Path;
 use tempfile::TempDir;
 use ts2rs::compiler::Compiler;
 
@@ -151,6 +150,9 @@ enum Status {
     let mut compiler = Compiler::new();
     let result = compiler.compile(&input_file, &output_file);
 
+    if let Err(e) = &result {
+        println!("Project compilation error: {:?}", e);
+    }
     assert!(result.is_ok());
 
     let rust_code = fs::read_to_string(&output_file).unwrap();
@@ -194,6 +196,9 @@ class Box<T> implements Container<T> {
     let mut compiler = Compiler::new();
     let result = compiler.compile(&input_file, &output_file);
 
+    if let Err(e) = &result {
+        println!("Generic compilation error: {:?}", e);
+    }
     assert!(result.is_ok());
 
     let rust_code = fs::read_to_string(&output_file).unwrap();
@@ -258,6 +263,9 @@ export class Person {
     let mut compiler = Compiler::new();
     let result = compiler.compile_project(&input_dir, &output_dir);
 
+    if let Err(e) = &result {
+        println!("Project compilation error: {:?}", e);
+    }
     assert!(result.is_ok());
 
     // Check output files
@@ -292,6 +300,9 @@ const result2 = processData(42);
     let mut compiler = Compiler::new().with_runtime(true);
     let result = compiler.compile(&input_file, &output_file);
 
+    if let Err(e) = &result {
+        println!("Runtime compilation error: {:?}", e);
+    }
     assert!(result.is_ok());
 
     let rust_code = fs::read_to_string(&output_file).unwrap();

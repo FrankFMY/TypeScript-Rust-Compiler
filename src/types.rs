@@ -81,6 +81,19 @@ impl TypeMapper {
 
             // Generic types
             Type::Generic(generic) => self.map_generic_type(generic),
+            Type::GenericNamed { name, type_parameters } => {
+                let rust_name = self.map_named_type(name)?;
+                if type_parameters.is_empty() {
+                    Ok(rust_name)
+                } else {
+                    let param_types: Result<Vec<String>> = type_parameters
+                        .iter()
+                        .map(|param| self.map_type(&Type::Named(param.name.clone())))
+                        .collect();
+                    let param_types = param_types?;
+                    Ok(format!("{}<{}>", rust_name, param_types.join(", ")))
+                }
+            }
 
             // Union types
             Type::Union(types) => self.map_union_type(types),

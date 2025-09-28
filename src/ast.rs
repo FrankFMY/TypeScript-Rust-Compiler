@@ -427,6 +427,7 @@ pub enum Type {
 
     // Generic types
     Generic(GenericType),
+    GenericNamed { name: String, type_parameters: Vec<TypeParameter> },
 
     // Union and intersection types
     Union(Vec<Type>),

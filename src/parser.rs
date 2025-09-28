@@ -100,7 +100,7 @@ impl Parser {
 
     /// Parse function declaration
     fn parse_function_declaration(&mut self) -> Result<Statement> {
-        self.expect_keyword()?; // function
+        self.expect_keyword()?; // consume 'function' keyword
         let name = self.expect_identifier()?;
         let type_parameters = self.parse_type_parameters()?;
         let parameters = self.parse_parameters()?;
@@ -123,7 +123,7 @@ impl Parser {
 
     /// Parse class declaration
     fn parse_class_declaration(&mut self) -> Result<Statement> {
-        self.expect_keyword()?; // class
+        self.expect_keyword()?; // consume 'class' keyword
         let name = self.expect_identifier()?;
         let type_parameters = self.parse_type_parameters()?;
         let extends = if self.current_token() == &Token::Keyword(crate::lexer::Keyword::Extends) {
@@ -146,7 +146,7 @@ impl Parser {
 
     /// Parse interface declaration
     fn parse_interface_declaration(&mut self) -> Result<Statement> {
-        self.expect_keyword()?; // interface
+        self.expect_keyword()?; // consume 'interface' keyword
         let name = self.expect_identifier()?;
         let type_parameters = self.parse_type_parameters()?;
         let extends = self.parse_extends()?;
@@ -162,7 +162,7 @@ impl Parser {
 
     /// Parse type alias
     fn parse_type_alias(&mut self) -> Result<Statement> {
-        self.expect_keyword()?; // type
+        self.expect_keyword()?; // consume 'type' keyword
         let name = self.expect_identifier()?;
         let type_parameters = self.parse_type_parameters()?;
         self.expect_token(&Token::Assign)?;
@@ -178,7 +178,7 @@ impl Parser {
 
     /// Parse enum declaration
     fn parse_enum_declaration(&mut self) -> Result<Statement> {
-        self.expect_keyword()?; // enum
+        self.expect_keyword()?; // consume 'enum' keyword
         let name = self.expect_identifier()?;
         let members = self.parse_enum_members()?;
 
@@ -201,9 +201,44 @@ impl Parser {
 
     /// Parse export declaration
     fn parse_export_declaration(&mut self) -> Result<Statement> {
-        self.expect_keyword()?; // export
-        let declaration = self.parse_statement()?;
-        Ok(Statement::ExportDeclaration(Box::new(ExportDeclaration { declaration: Box::new(declaration.unwrap()) })))
+        // Consume 'export' keyword
+        self.advance();
+        // Parse the specific declaration type directly
+        let token = self.current_token().clone();
+        let declaration = match token {
+            Token::Keyword(crate::lexer::Keyword::Class) => {
+                self.parse_class_declaration()?
+            }
+            Token::Keyword(crate::lexer::Keyword::Interface) => {
+                self.parse_interface_declaration()?
+            }
+            Token::Keyword(crate::lexer::Keyword::Function) => {
+                self.parse_function_declaration()?
+            }
+            Token::Keyword(crate::lexer::Keyword::Const) => {
+                self.parse_variable_declaration()?
+            }
+            Token::Keyword(crate::lexer::Keyword::Let) => {
+                self.parse_variable_declaration()?
+            }
+            Token::Keyword(crate::lexer::Keyword::Var) => {
+                self.parse_variable_declaration()?
+            }
+            Token::Keyword(crate::lexer::Keyword::Enum) => {
+                self.parse_enum_declaration()?
+            }
+            Token::Keyword(crate::lexer::Keyword::Type) => {
+                self.parse_type_alias()?
+            }
+            _ => {
+                return Err(CompilerError::parse_error(
+                    1,
+                    1,
+                    format!("Unexpected token in export declaration: {:?}", token),
+                ))
+            }
+        };
+        Ok(Statement::ExportDeclaration(Box::new(ExportDeclaration { declaration: Box::new(declaration) })))
     }
 
     /// Parse namespace declaration
@@ -513,6 +548,22 @@ impl Parser {
                 self.advance();
                 Ok(Expression::This(ThisExpression))
             }
+            Token::Keyword(crate::lexer::Keyword::New) => {
+                self.advance();
+                let callee = self.parse_primary_expression()?;
+                let arguments = if self.current_token() == &Token::LeftParen {
+                    self.advance(); // consume '('
+                    let args = self.parse_arguments()?;
+                    self.expect_token(&Token::RightParen)?;
+                    args
+                } else {
+                    Vec::new()
+                };
+                Ok(Expression::New(NewExpression {
+                    callee: Box::new(callee),
+                    arguments,
+                }))
+            }
             Token::LeftParen => {
                 self.advance();
                 let expression = self.parse_expression()?;
@@ -617,7 +668,16 @@ impl Parser {
             }
             Token::Identifier(name) => {
                 self.advance();
-                Ok(Type::Named(name.to_string()))
+                // Check for generic type parameters
+                if self.current_token() == &Token::LessThan {
+                    let type_parameters = self.parse_type_parameters()?;
+                    Ok(Type::GenericNamed {
+                        name: name.to_string(),
+                        type_parameters,
+                    })
+                } else {
+                    Ok(Type::Named(name.to_string()))
+                }
             }
             Token::LeftParen => {
                 self.advance();
@@ -711,7 +771,8 @@ impl Parser {
     }
 
     fn is_equality_operator(&self) -> bool {
-        matches!(self.current_token(), Token::Equal | Token::NotEqual)
+        matches!(self.current_token(), 
+            Token::Equal | Token::NotEqual | Token::StrictEqual | Token::StrictNotEqual)
     }
 
     fn is_relational_operator(&self) -> bool {
@@ -899,8 +960,33 @@ impl Parser {
     }
 
     fn parse_import_specifiers(&mut self) -> Result<Vec<ImportSpecifier>> {
-        // TODO: Implement import specifier parsing
-        Ok(Vec::new())
+        let mut specifiers = Vec::new();
+        
+        if self.current_token() == &Token::LeftBrace {
+            self.advance(); // consume '{'
+            
+            while self.current_token() != &Token::RightBrace {
+                let name = self.expect_identifier()?;
+                specifiers.push(ImportSpecifier::Named(NamedImportSpecifier {
+                    imported: name.clone(),
+                    name: name,
+                }));
+                
+                if self.current_token() == &Token::Comma {
+                    self.advance();
+                }
+            }
+            
+            self.expect_token(&Token::RightBrace)?; // consume '}'
+        } else {
+            // Default import
+            let name = self.expect_identifier()?;
+            specifiers.push(ImportSpecifier::Default(DefaultImportSpecifier {
+                name: name,
+            }));
+        }
+        
+        Ok(specifiers)
     }
 
     fn parse_arguments(&mut self) -> Result<Vec<Expression>> {
