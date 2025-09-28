@@ -52,7 +52,14 @@ impl Utf8Lexer {
             '+' => Ok(Some(Token::Plus)),
             '-' => Ok(Some(Token::Minus)),
             '*' => Ok(Some(Token::Multiply)),
-            '/' => Ok(Some(Token::Divide)),
+            '/' => {
+                // Check if this is the start of a regular expression
+                if self.peek_char() == Some('^') {
+                    Ok(self.parse_regex()?)
+                } else {
+                    Ok(Some(Token::Divide))
+                }
+            },
             '%' => Ok(Some(Token::Modulo)),
             '=' => {
                 if self.peek_char() == Some('=') {
@@ -63,6 +70,9 @@ impl Utf8Lexer {
                     } else {
                         Ok(Some(Token::Equal))
                     }
+                } else if self.peek_char() == Some('>') {
+                    self.advance();
+                    Ok(Some(Token::Arrow))
                 } else {
                     Ok(Some(Token::Assign))
                 }
@@ -123,6 +133,7 @@ impl Utf8Lexer {
             '.' => Ok(Some(Token::Dot)),
             ':' => Ok(Some(Token::Colon)),
             '?' => Ok(Some(Token::QuestionMark)),
+            '@' => Ok(Some(Token::At)), // Add support for @ decorator symbol
             '"' | '\'' => Ok(self.parse_string()?),
             '`' => Ok(self.parse_template_literal()?),
             '0'..='9' => Ok(self.parse_number()?),
@@ -347,7 +358,6 @@ impl Utf8Lexer {
             "module" => Some(Keyword::Module),
             "export" => Some(Keyword::Export),
             "import" => Some(Keyword::Import),
-            "default" => Some(Keyword::Default),
             "public" => Some(Keyword::Public),
             "private" => Some(Keyword::Private),
             "protected" => Some(Keyword::Protected),
@@ -393,7 +403,49 @@ impl Utf8Lexer {
             "boolean" => Some(Keyword::Boolean),
             "symbol" => Some(Keyword::Symbol),
             "bigint" => Some(Keyword::BigInt),
+            "typeof" => Some(Keyword::Typeof),
             _ => None,
         }
+    }
+
+    /// Parse regular expression literal
+    fn parse_regex(&mut self) -> Result<Option<Token>> {
+        let mut pattern = String::new();
+        let mut flags = String::new();
+
+        self.advance(); // consume '/'
+
+        // Parse pattern until closing '/'
+        while self.position < self.chars.len() {
+            let ch = self.current_char();
+            if ch == '/' {
+                self.advance();
+                break;
+            } else if ch == '\\' {
+                // Handle escape sequences
+                pattern.push(ch);
+                self.advance();
+                if self.position < self.chars.len() {
+                    pattern.push(self.current_char());
+                    self.advance();
+                }
+            } else {
+                pattern.push(ch);
+                self.advance();
+            }
+        }
+
+        // Parse flags
+        while self.position < self.chars.len() {
+            let ch = self.current_char();
+            if ch.is_alphabetic() {
+                flags.push(ch);
+                self.advance();
+            } else {
+                break;
+            }
+        }
+
+        Ok(Some(Token::RegExp(pattern, flags)))
     }
 }

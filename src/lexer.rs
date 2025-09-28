@@ -56,6 +56,8 @@ pub enum Token {
     Dot,
     Colon,
     QuestionMark,
+    At,
+    RegExp(String, String), // pattern, flags
 
     // Type annotations
     TypeAnnotation,
@@ -352,6 +354,15 @@ impl Lexer {
             '.' => Ok(Some(Token::Dot)),
             ':' => Ok(Some(Token::Colon)),
             '?' => Ok(Some(Token::QuestionMark)),
+            '@' => Ok(Some(Token::At)), // Add support for @ decorator symbol
+            '/' => {
+                // Check if this is the start of a regular expression
+                if self.peek_char() == Some('^') {
+                    Ok(self.parse_regex()?)
+                } else {
+                    Ok(Some(Token::Divide))
+                }
+            },
             '"' | '\'' => Ok(self.parse_string()?),
             '`' => Ok(self.parse_template_literal()?),
             '0'..='9' => Ok(self.parse_number()?),
@@ -393,10 +404,6 @@ impl Lexer {
         self.input.chars().nth(self.position).unwrap_or('\0')
     }
     
-    /// Check if we can safely get current character
-    fn has_current_char(&self) -> bool {
-        self.position < self.input.len()
-    }
 
     /// Peek at next character
     fn peek_char(&self) -> Option<char> {
@@ -691,5 +698,46 @@ impl Lexer {
             "global" => Some(Keyword::Global),
             _ => None,
         }
+    }
+
+    /// Parse regular expression literal
+    fn parse_regex(&mut self) -> Result<Option<Token>> {
+        let mut pattern = String::new();
+        let mut flags = String::new();
+
+        self.advance(); // consume '/'
+
+        // Parse pattern until closing '/'
+        while self.position < self.input.len() {
+            let ch = self.current_char();
+            if ch == '/' {
+                self.advance();
+                break;
+            } else if ch == '\\' {
+                // Handle escape sequences
+                pattern.push(ch);
+                self.advance();
+                if self.position < self.input.len() {
+                    pattern.push(self.current_char());
+                    self.advance();
+                }
+            } else {
+                pattern.push(ch);
+                self.advance();
+            }
+        }
+
+        // Parse flags
+        while self.position < self.input.len() {
+            let ch = self.current_char();
+            if ch.is_alphabetic() {
+                flags.push(ch);
+                self.advance();
+            } else {
+                break;
+            }
+        }
+
+        Ok(Some(Token::RegExp(pattern, flags)))
     }
 }

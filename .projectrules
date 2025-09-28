@@ -1,0 +1,219 @@
+# Project-Specific Rules for TypeScript-Rust-Compiler
+
+## 🎯 Context7 MCP Usage Rules
+ALWAYS consult current documentation via Context7 MCP in these cases:
+🚨 Critical situations (always check):
+- New frameworks/libraries: SvelteKit, React, Vue, Angular, Next.js, Nuxt, Remix
+- Rapidly evolving technologies: TypeScript, Tailwind CSS, Vite, Webpack, Node.js
+- APIs and databases: REST APIs, GraphQL, Prisma, Drizzle, Supabase, Firebase
+- Infrastructure: Docker, Kubernetes, AWS, Vercel, Netlify
+- Testing: Jest, Vitest, Playwright, Cypress, Testing Library
+
+📋 Mandatory checks before writing code:
+- Check latest API changes before using any framework
+- Always get documentation for current version when working with new versions
+- Search for best practices and patterns when solving architectural tasks
+- Study official documentation when integrating third-party services
+- Check current options and syntax when writing configurations
+
+🎯 Priority topics for documentation:
+- Routing and navigation - always relevant for SPA/SSR
+- Data loading and caching - critical for performance
+- Authentication and security - constantly changing standards
+- Optimization and bundling - new approaches appear regularly
+- TypeScript and typing - rapidly evolving ecosystem
+
+⚡ Usage rules:
+- Always start with resolve-library-id to get exact library ID
+- Use tokens: 15000 for maximum complete documentation
+- Specify specific topics via topic parameter for focus
+- Check Trust Score - prefer sources with high rating (7+)
+- Study Code Snippets - minimum 50 examples for quality documentation
+
+🚫 Prohibited:
+- Writing code without checking documentation for new technologies
+- Using outdated APIs without justification
+- Ignoring official documentation in favor of old sources
+- Applying patterns without understanding modern approaches
+
+✅ Definition of Done for documentation:
+- Obtained current documentation with Trust Score ≥7
+- Studied Code Snippets (minimum 50 examples)
+- Checked latest API changes
+- Found best practices for specific task
+- Applied documentation in code with comments
+
+🔄 Workflow:
+Analysis of task → Technology identification needed
+Context7 lookup → Obtaining current documentation
+Example study → Understanding modern approaches
+Solution planning → Considering best practices
+Implementation → Following current recommendations
+Remember: current documentation = quality code. Never write code blindly!
+
+## 📝 Code Style Rules
+- Never write or create stupid, absolutely unnecessary and useless code that wasn't requested. Code for the sake of code is idiocy. You should constantly ask yourself whether the code you're writing now is stupid, unnecessary and useful, and whether it's really correct and good from the point of view of the latest technology versions you applied and all architectural decisions.
+- If in your opinion, analysis and assessment the user asks you to do something absolutely stupid, dumb, idiotic and ill-conceived or poorly conceived, you are obliged to think through this moment, warn him about possible consequences and shortcomings of his decision or judgments or arguments and suggest a better and correct in your opinion ideal solution for each situation and request.
+
+## 🏗️ Architecture Rules
+- Apply semantic HTML markup: <header>, <nav>, <main>, <section>, <article>, <aside>, <footer>. Forbidden to use meaningless <div> for content structuring.
+- Layout should be adaptive and "rubber": mobile-first principle, all styles built through Tailwind utilities with breakpoints (sm, md, lg, xl, 2xl). Forbidden to fix widths and heights in px, instead use rem, %, flex-grow/shrink, CSS Grid auto-fit.
+- For typography use rem for font-size, line-height minimum 1.5; headings go strictly by hierarchy <h1>-<h6>, without skips. Forbidden to mix different heading levels or use px for font sizes.
+- All interactive elements - semantic: buttons - <button> with aria-* attributes, links - <a> with href. Forbidden to remove outline from focuses without replacing with understandable styles (ring-2, etc.).
+- Images inserted using <picture> and srcset with adaptive loading, specify object-fit and sizes through Tailwind. All images optimized and use loading="lazy". Forbidden to insert uncompressed PNG inline.
+- Forms must have <label for> for each field, cannot use only placeholder as label. Validation errors shown under fields in red text. Forbidden to swallow user validation errors.
+- Forbidden to write layout using !important, inline styles. All custom styles defined through tailwind.config.js (@layer components/utilities).
+- Must use design token system: colors, indents, radii, fonts must be set through Tailwind variables. Forbidden to hardcode colors and sizes directly in classes.
+- When using Flexbox or CSS Grid forbidden to mix these approaches without good reason. For large lists and tables must use pagination or virtualization.
+- Forbidden to mix Tailwind with Bootstrap or Material UI within one component without necessity. If using third-party UI libraries, styles should integrate cleanly through their recommended methods (e.g., MUI through sx or styled, Bootstrap through utilities and custom themes).
+- Before commit and push run stylelint and axe-core (or jest-axe) to check accessibility and styles. All checks must pass without errors and warnings.
+- In CI run storybook with visual-regression tests and Lighthouse for performance and accessibility monitoring. Forbidden to push code causing CI to fail, or leave problems unfixed.
+- Definition of Done: code contains semantic adaptive layout without horizontal scrolls, rubber layout through Tailwind, unified design language through design tokens, passes all stylelint/axe-core tests, CI is green. If any condition not met - change not accepted.
+
+## 🚫 PROHIBITED:
+- Using !important and inline styles
+- Fixed pixel sizes without adaptation to breakpoints
+- Skipping or violating heading hierarchy
+- Replacing labels with placeholder
+- Removing outline without replacement
+- Inserting uncompressed or inline PNG images
+- Mixing incompatible CSS systems without reason
+- Mixing Tailwind and Bootstrap/MUI in one component without documentation
+- Ignoring accessibility and quality checks in CI
+- Fixed sizes without adaptation to breakpoints
+- Ignoring stylelint and axe-core errors before commit
+- Lack of semantics in layout
+- Incorrectly organized DOM structure (e.g., div-only)
+- Lack of focus styles and aria attributes
+
+## ✅ SvelteKit Rules
+- Use SvelteKit 5.x (latest minor). Runes mode fixed in project config and not changed arbitrarily. If Runes enabled - use only modern Runes reactivity, don't mix with old.
+- Get page data only through load in +page.ts/+layout.ts or server load in +page.server.ts. Any network requests for page data outside load forbidden. Components .svelte don't perform page data loading - get them from load.
+- Implement all mutations through form actions in +page.server.ts; improve UX through use:enhance if needed. Manual fetch from component for mutations forbidden. Return errors in actions through fail(...) with strict types, redirects through redirect(...).
+- All server logic only in +page.server.ts or +server.ts. In +server.ts export only HTTP methods (GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD). Non-standard functions in +server.ts forbidden. Non-standard paths for server routes outside +server.ts scheme forbidden. Arbitrary src/routes/api/*.ts without +server.ts forbidden.
+- Secrets and private keys never get to client. Only PUBLIC_ env variables allowed on client. Access to external APIs requiring keys/secrets perform through server proxy (+server.ts or +page.server.ts), not directly from client.
+- No use of deprecated Svelte 3/4 APIs/hooks. Forbidden to mix Runes with old reactivity. Use Runes only for local UI state in .svelte. Data from load remains component props/data; don't move to $state without reason.
+- No access to window/document/localStorage in code that can run on server (+page.server.ts, +server.ts, hooks.server.ts). If localStorage or other browser APIs needed - use onMount or check environment through browser from $app/environment. Forbidden to import modules with browser API dependencies in server files.
+- SvelteKit file structure strictly followed: +page.ts/+page.svelte/+layout.ts/+page.server.ts/+server.ts used as intended. Common components in $lib/components, utilities in $lib/utils, types in $lib/types, server utilities in $lib/server. Forbidden to import from $lib/server in client code.
+- Imports and aliases use only current: $lib, $app/*, $env/static/private, $env/static/public, $env/dynamic/private, $env/dynamic/public. Import from deprecated $app/env forbidden.
+- Type safety mandatory. Strict TypeScript enabled. any and implicit any forbidden in contracts. Return types of load and actions must be explicitly described and match actual data. Use unified validation schema (e.g., Zod). Validation errors not swallowed - returned structured and typed.
+- Cache and invalidation of data performed by standard means. In load specify depends('key') for data depending on parameters/session. After successful mutations call invalidate('key') or invalidateAll if needed. Workarounds for data updates forbidden.
+- Error handling by standard SvelteKit mechanisms: error(...) and +error.svelte; global scenarios through handle/handleError. Redirects through redirect(...). Transitions and preloading performed by $app/navigation and preload means; use navigate, beforeNavigate/afterNavigate as needed.
+- Performance and bundle under control. Heavy computations on client main thread forbidden - move to server or web workers and cache. Don't pull heavy dependencies to client without good reason. For large lists mandatory pagination/virtualization plan. Avoid duplicate requests from load - use depends and server caching.
+- Style and organization. In Svelte styles by default isolated at component level; global styles through layout or global.css or :global. Component names - PascalCase. Section order in .svelte: imports, types, constants, variables, functions, markup. Comments write for non-trivial logic and public APIs; obvious not commented.
+- Quality processes and CI/CD mandatory. Before each commit and push run svelte-check, eslint, typecheck and tests - without errors/warnings of error level. Code must be ready for automatic build and testing on CI/CD without manual modifications. Any yellow or red statuses in CI inadmissible - reason must be immediately fixed. When changes affecting build/tests, update README and document non-standard solutions.
+- Tests mandatory for new public routes and server endpoints: minimum happy-path and one negative scenario. Forbidden to merge code with failing tests or reducing target coverage below set threshold (if set).
+- Definition of Done: 1) page data obtained through load, 2) mutations implemented through actions or +server.ts, 3) secrets remain on server, 4) SSR-safety observed (no window/document in server paths), 5) no deprecated APIs/hooks, 6) correctly applied depends/invalidate, 7) svelte-check/eslint/typecheck/tests/CI green, 8) README/documentation updated when build/settings changed.
+- Working task order unchanged: Analysis of applicable SvelteKit 5 APIs without code → Plan of 4-6 steps → Implementation strictly by plan: output only changed files completely → Checklist compliance (SvelteKit 5 API, SSR-safety, types, no deprecated APIs, correct caching/invalidation, passing checks).
+- Mini-check after each edit (Yes/No): page data only through load, all mutations through actions, secrets remained on server, SSR-safety observed (no window/document in server paths), no deprecated APIs/hooks, passes svelte-check/eslint/typecheck, not mixed Runes and old syntax.
+- Always use latest stable library versions, check compatibility, avoid dependency conflicts and document external dependencies. Never hardcode secrets, keys and passwords - only environment variables. Validate all user data. Apply principle of least privilege. For network errors and external services provide correct handling and retry logic if needed. Log important events.
+- Code must be clean, structured, test-covered. No unused variables, parameters or imports. Forbidden to push temporary/dirty or non-working code to main branch. Any optimizations perform after measurements and profiling, document with benchmarks. Break large tasks into small, testable parts, provide context of related files, plan approach before code generation and iteratively improve solutions without breaking working logic.
+- When working with monorepos consider overall structure and dependencies between packages. Don't break existing structure agreements. Use workspace commands for management. Check impact of changes on other packages.
+- Report in advance about port, path and environment variable limitations. Warn about possible conflicts. Suggest alternatives for technical limitations.
+- For error commands analyze exact cause. Suggest minimum 2 alternative solutions. Choose optimal with justification. Report on actions and changes. Check fix functionality.
+- In Git Bash use atomic commands for complex operations. Follow Git Bash-compatible syntax. Check dependencies through Test-Path. Comment complex logic in detail.
+- Use latest stable library versions. Avoid dependency conflicts. Check compatibility before adding new packages. Document all external dependencies in README.
+- Never hardcode secrets, API keys and passwords. For all sensitive data use environment variables. Validate all user data. Apply principle of least privilege.
+- For integrations use environment variables. Provide correct error handling for network and external services. Implement retry logic for critical operations. Log important events.
+- Cover all new features with tests. Use strict typing in all supported languages. Mandatory pass linter checks. Run tests after each change. For new modules add brief and clear documentation.
+- Mandatory comments if not requiring reverse. Unified style: indents, camelCase for variables, PascalCase for functions and classes. Avoid deprecated patterns, use modern practices. Each function or module should contain usage example or test.
+- Project structure: root folder contains all related files, separate subfolders for modules, utilities and tests. Clear separation by contexts and features, not by file types.
+- Strictly follow principles in priority order: KISS - maximum simplicity of solutions, DRY - no duplication, YAGNI - only necessary functionality, SOLID - all five OOP design principles, APO - avoid premature optimization, BDUF - thorough architecture planning before coding.
+- Language of responses - exclusively Russian. Style - brief, informative, without water and repetitions. First think, then act - show reasoning. Break complex tasks into step-by-step actions. Always explain intermediate conclusions and decisions made.
+- I work in Git Bash on Windows 10. All projects in C:\web-projects. Installed Node.js 22, Python 3.13, Docker Desktop. Assistant allowed to run commands without confirmation. Use only pnpm, npm, npx, not yarn.
+- If something doesn't work, immediately analyze error, suggest 2-3 alternative solutions, fix and clearly explain cause of problem.
+- Always apply semantic HTML markup: <header>, <nav>, <main>, <section>, <article>, <aside>, <footer>. Forbidden to use meaningless <div> for content structuring.
+- Layout should be adaptive and "rubber": mobile-first principle, all styles built through Tailwind utilities with breakpoints (sm, md, lg, xl, 2xl). Forbidden to fix widths and heights in px, instead use rem, %, flex-grow/shrink, CSS Grid auto-fit.
+- For typography use rem for font-size, line-height minimum 1.5; headings go strictly by hierarchy <h1>-<h6>, without skips. Forbidden to mix different heading levels or use px for font sizes.
+- All interactive elements - semantic: buttons - <button> with aria-* attributes, links - <a> with href. Forbidden to remove outline from focuses without replacing with understandable styles (ring-2, etc.).
+- Images inserted using <picture> and srcset with adaptive loading, specify object-fit and sizes through Tailwind. All images optimized and use loading="lazy". Forbidden to insert uncompressed PNG inline.
+- Forms must have <label for> for each field, cannot use only placeholder as label. Validation errors shown under fields in red text. Forbidden to swallow user validation errors.
+- Forbidden to write layout using !important, inline styles. All custom styles defined through tailwind.config.js (@layer components/utilities).
+- Must use design token system: colors, indents, radii, fonts must be set through Tailwind variables. Forbidden to hardcode colors and sizes directly in classes.
+- When using Flexbox or CSS Grid forbidden to mix these approaches without good reason. For large lists and tables must use pagination or virtualization.
+- Forbidden to mix Tailwind with Bootstrap or Material UI within one component without necessity. If using third-party UI libraries, styles should integrate cleanly through their recommended methods (e.g., MUI through sx or styled, Bootstrap through utilities and custom themes).
+- Before commit and push run stylelint and axe-core (or jest-axe) to check accessibility and styles. All checks must pass without errors and warnings.
+- In CI run storybook with visual-regression tests and Lighthouse for performance and accessibility monitoring. Forbidden to push code causing CI to fail, or leave problems unfixed.
+- Definition of Done: code contains semantic adaptive layout without horizontal scrolls, rubber layout through Tailwind, unified design language through design tokens, passes all stylelint/axe-core tests, CI is green. If any condition not met - change not accepted.
+
+## 🚫 CRITICAL ARCHITECTURE ERRORS
+Loading page data in onMount instead of load
+Why bad: breaks SSR/SEO, content flashes, duplicates requests, loses unified data contract.
+How correct: use load in +page.ts/+layout.ts (client/SSR) or +page.server.ts (server only).
+
+Making mutations through manual fetch from component
+Why bad: loses standard validation/redirect handling, worse security, logic duplication.
+How correct: form actions in +page.server.ts, use use:enhance for UX if needed.
+
+Placing server logic in components or arbitrary files
+Why bad: secret leaks, no SSR isolation, unsafe imports.
+How correct: all server logic strictly in +page.server.ts or +server.ts.
+
+Mixing Runes with deprecated reactivity or pushing server data to $state
+Why bad: unpredictability, double reactivity, desync with load data.
+How correct: Runes - only for local UI state; data from load - as props/component data.
+
+Using window/document/localStorage in server-executable code
+Why bad: crashes on SSR, races, environment mismatch.
+How correct: all browser API calls - inside onMount or conditionally guard by environment.
+
+## 🚫 DATA AND API ERRORS
+Pulling secrets/private tokens to client
+Why bad: compromise, API limit abuse, insecurity.
+How correct: all secrets only on server; client exposes only PUBLIC_ variables.
+
+Going to external APIs directly from client without server proxy
+Why bad: key leaks, no centralized error handling and caching.
+How correct: proxy through +server.ts or +page.server.ts.
+
+Ignoring invalidate()/depends() and manually "hacking" data updates
+Why bad: state desync, refresh difficulties.
+How correct: use invalidate on mutations and depends in load for correct invalidation graph.
+
+Mixing truth source: part from load, part from onMount/stores without contract
+Why bad: races and state inconsistency.
+How correct: declare unified data contract through load; additional local - consciously through Runes/stores.
+
+## 🚫 ROUTING AND FILE STRUCTURE ERRORS
+Incorrect route file structure
+Why bad: SvelteKit relies on file routing; wrong name - wrong route.
+How correct: use +page.ts/+page.svelte/+layout.ts/+page.server.ts/+server.ts strictly as intended.
+
+Embedding business endpoints in arbitrary src/routes/api/*.ts
+Why bad: unaccounted routes, bypassing conventions.
+How correct: only +server.ts scheme (e.g., routes/api/users/+server.ts).
+
+Abusing svelte:component and dynamic imports
+Why bad: complicates SSR, bloats bundle, complex dependency graphs.
+How correct: dynamic render - only when really needed.
+
+## 🚫 TYPE AND VALIDATION ERRORS
+Returning untyped data from load and actions
+Why bad: silent errors, unstable contracts.
+How correct: strict TS, explicit return types, validation schema (Zod/Valibot by choice).
+
+Relying on any and implicit any
+Why bad: breaks TS advantages, hides errors.
+How correct: enable strict, avoid any, type forms and data.
+
+## 🚫 SSR/SEO/PERFORMANCE ERRORS
+Disabling SSR without reason or "fixing" with onMount
+Why bad: SEO falls, UX worsens, time to first content increases.
+How correct: keep SSR enabled; data - through load.
+
+Performing heavy computations in component on main thread
+Why bad: UI lags.
+How correct: move to server/workers, cache on server side.
+
+Proliferating duplicate requests due to lack of caching in load
+Why bad: unnecessary load and delays.
+How correct: use depends, k/v server cache, rationally call external APIs.
+
+## 🚫 ERROR HANDLING AND NAVIGATION ERRORS
+"Manual" error handling instead of SvelteKit mechanisms
+Why bad: fragmented, non-standard.
+How correct: error(...) and +error.svelte; redirect(...) for navigation; handle for global scenarios.
+
+Transitions without $app/navigation and preload
+Why bad: unpredictable transitions, no preloading.
+How correct: use navigate/preload, beforeNavigate/afterNavigate as needed.

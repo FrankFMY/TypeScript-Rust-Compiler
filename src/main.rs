@@ -1,7 +1,7 @@
 use clap::Parser;
 use std::path::PathBuf;
-use TypeScript_Rust_Compiler::compiler::Compiler;
-use TypeScript_Rust_Compiler::error::Result;
+use typescript_rust_compiler::compiler::Compiler;
+use typescript_rust_compiler::error::Result;
 
 #[derive(Parser)]
 #[command(name = "typescript-rust-compiler")]
@@ -52,10 +52,9 @@ fn main() -> Result<()> {
         .with_optimization(cli.optimize)
         .with_runtime(cli.runtime);
 
-    // Test lexer (only in debug mode) - moved to separate function
+    // Debug mode - just print that we're in debug mode
     if cli.debug {
-        println!("Debug mode: Testing lexer with sample code");
-        TypeScript_Rust_Compiler::test_lexer::test_lexer();
+        println!("Debug mode: Enabled");
     }
 
     // Compile TypeScript to Rust

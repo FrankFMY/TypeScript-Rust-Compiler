@@ -93,15 +93,15 @@ impl TypeMapper {
             Type::Generic(generic) => self.map_generic_type(generic),
             Type::GenericNamed {
                 name,
-                type_parameters,
+                type_arguments,
             } => {
                 let rust_name = self.map_named_type(name)?;
-                if type_parameters.is_empty() {
+                if type_arguments.is_empty() {
                     Ok(rust_name)
                 } else {
-                    let param_types: Result<Vec<String>> = type_parameters
+                    let param_types: Result<Vec<String>> = type_arguments
                         .iter()
-                        .map(|param| self.map_type(&Type::Named(param.name.clone())))
+                        .map(|arg| self.map_type(arg))
                         .collect();
                     let param_types = param_types?;
                     Ok(format!("{}<{}>", rust_name, param_types.join(", ")))
@@ -203,45 +203,6 @@ impl TypeMapper {
         }
     }
 
-    /// Map union type
-    fn map_union_type(&mut self, types: &[Type]) -> Result<String> {
-        if types.is_empty() {
-            return Ok("()".to_string());
-        }
-
-        if types.len() == 1 {
-            return self.map_type(&types[0]);
-        }
-
-        // Convert union to enum
-        let mut enum_variants = Vec::new();
-        for (i, ts_type) in types.iter().enumerate() {
-            let rust_type = self.map_type(ts_type)?;
-            enum_variants.push(format!("Variant{}({})", i, rust_type));
-        }
-
-        Ok(format!(
-            "UnionType {{\n    {}\n}}",
-            enum_variants.join(",\n    ")
-        ))
-    }
-
-    /// Map intersection type
-    fn map_intersection_type(&mut self, types: &[Type]) -> Result<String> {
-        if types.is_empty() {
-            return Ok("()".to_string());
-        }
-
-        if types.len() == 1 {
-            return self.map_type(&types[0]);
-        }
-
-        // Convert intersection to trait bounds
-        let rust_types: Result<Vec<String>> = types.iter().map(|t| self.map_type(t)).collect();
-        let rust_types = rust_types?;
-
-        Ok(format!("({})", rust_types.join(" + ")))
-    }
 
     /// Map tuple type
     fn map_tuple_type(&mut self, types: &[Type]) -> Result<String> {

@@ -2,7 +2,6 @@
 
 use crate::error::{CompilerError, Result};
 use crate::generator::CodeGenerator;
-use crate::lexer::Lexer;
 use crate::lexer_utf8::Utf8Lexer;
 use crate::parser::Parser;
 use std::fs;

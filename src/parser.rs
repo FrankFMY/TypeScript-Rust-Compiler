@@ -28,7 +28,7 @@ impl Parser {
 
         while self.position < self.tokens.len() && iterations < max_iterations {
             let old_position = self.position;
-            
+
             match self.parse_statement() {
                 Ok(Some(statement)) => {
                     statements.push(statement);
@@ -699,6 +699,10 @@ impl Parser {
                 self.advance();
                 Ok(Expression::Literal(Literal::String(s)))
             }
+            Token::RegExp(pattern, flags) => {
+                self.advance();
+                Ok(Expression::Literal(Literal::RegExp(pattern.clone(), flags.clone())))
+            }
             Token::TemplateLiteral(s) => {
                 self.advance();
                 // Create a simple template literal with one quasi
@@ -987,23 +991,49 @@ impl Parser {
                 self.advance();
                 Ok(Type::Undefined) // undefined -> undefined for now
             }
-            Token::Identifier(name) => {
+            Token::Null => {
                 self.advance();
-                // Check for indexed access type: T[K]
+                Ok(Type::Null)
+            }
+            Token::Undefined => {
+                self.advance();
+                Ok(Type::Undefined)
+            }
+            Token::Identifier(name) => {
+                // First, parse the base type (could be array type, generic type, etc.)
+                let base_type = if self.current_token() == &Token::LessThan {
+                    // Parse generic type
+                    self.advance(); // consume <
+                    let mut type_args = Vec::new();
+
+                    while self.current_token() != &Token::GreaterThan && self.current_token() != &Token::EOF {
+                        let arg = self.parse_type()?;
+                        type_args.push(arg);
+
+                        if self.current_token() == &Token::Comma {
+                            self.advance(); // consume ,
+                        } else {
+                            break;
+                        }
+                    }
+
+                    self.expect_token(&Token::GreaterThan)?; // consume >
+
+                    Type::GenericNamed {
+                        name: name.to_string(),
+                        type_arguments: type_args,
+                    }
+                } else {
+                    Type::Named(name.to_string())
+                };
+
+                // Then check for array brackets
                 if self.current_token() == &Token::LeftBracket {
                     self.advance(); // consume [
-                    let _index_type = self.parse_type()?;
-                    self.expect_token(&Token::RightBracket)?;
-                    // For now, return the base type (indexed access is handled at runtime)
-                    Ok(Type::Named(name.to_string()))
-                } else if self.current_token() == &Token::LessThan {
-                    let type_parameters = self.parse_type_parameters()?;
-                    Ok(Type::GenericNamed {
-                        name: name.to_string(),
-                        type_parameters,
-                    })
+                    self.expect_token(&Token::RightBracket)?; // consume ]
+                    Ok(Type::Array(Box::new(base_type)))
                 } else {
-                    Ok(Type::Named(name.to_string()))
+                    Ok(base_type)
                 }
             }
             Token::String(s) => {
@@ -1431,7 +1461,12 @@ impl Parser {
 
         while self.current_token() != &Token::RightBrace && self.current_token() != &Token::EOF {
             let member = self.parse_class_member()?;
-            members.push(member);
+            members.push(member.clone());
+
+            // Handle decorator-only members
+            if let ClassMember::Decorator(_) = &member {
+                continue;
+            }
         }
 
         self.expect_token(&Token::RightBrace)?;
@@ -1518,7 +1553,30 @@ impl Parser {
 
     fn parse_class_member(&mut self) -> Result<ClassMember> {
         let mut modifiers = Vec::new();
-        
+        let mut decorators = Vec::new();
+
+        // Parse decorators first
+        while self.current_token() == &Token::At {
+            self.advance(); // consume @
+            let decorator_name = self.expect_identifier()?;
+            decorators.push(decorator_name);
+
+            // Skip arguments for now (e.g., @log())
+            if self.current_token() == &Token::LeftParen {
+                self.advance(); // consume (
+                // Skip arguments until closing paren
+                let mut paren_count = 1;
+                while paren_count > 0 && self.position < self.tokens.len() {
+                    match self.current_token() {
+                        Token::LeftParen => paren_count += 1,
+                        Token::RightParen => paren_count -= 1,
+                        _ => {}
+                    }
+                    self.advance();
+                }
+            }
+        }
+
         // Parse access modifiers
         while let Token::Keyword(keyword) = self.current_token() {
             match keyword {
@@ -1546,6 +1604,11 @@ impl Parser {
             }
         }
 
+        // If we have decorators but no following member, return just the decorator
+        if !decorators.is_empty() && self.position >= self.tokens.len() - 1 {
+            return Ok(ClassMember::Decorator(decorators[0].clone()));
+        }
+
         let token = self.current_token().clone();
 
         match token {
@@ -1558,6 +1621,7 @@ impl Parser {
                     parameters,
                     body: Some(body),
                     modifiers,
+                    decorators: decorators.clone(),
                 }))
             }
             Token::Keyword(crate::lexer::Keyword::Get) => {
@@ -1601,6 +1665,7 @@ impl Parser {
                     type_: return_type,
                     body: Some(body),
                     modifiers,
+                    decorators,
                 }))
             }
             Token::Keyword(crate::lexer::Keyword::Set) => {
@@ -1654,6 +1719,7 @@ impl Parser {
                     parameter,
                     body: Some(body),
                     modifiers,
+                    decorators,
                 }))
             }
             Token::Identifier(name) => {
@@ -1670,6 +1736,7 @@ impl Parser {
                         parameters,
                         body: Some(body),
                         modifiers,
+                        decorators: decorators.clone(),
                     }))
                 } else if self.current_token() == &Token::LeftParen {
                     // It's a method
@@ -1690,6 +1757,7 @@ impl Parser {
                         return_type,
                         body: Some(body),
                         modifiers,
+                        decorators,
                     }))
                 } else if self.current_token() == &Token::Colon {
                     // It's a property
@@ -1711,6 +1779,7 @@ impl Parser {
                         type_: Some(type_annotation),
                         initializer,
                         modifiers,
+                        decorators,
                     }))
                 } else {
                     // It's a constructor
@@ -1718,11 +1787,12 @@ impl Parser {
                         let parameters = self.parse_parameters()?;
                         let body = self.parse_block_statement()?;
 
-                        Ok(ClassMember::Constructor(ConstructorDeclaration {
-                            parameters,
-                            body: Some(body),
-                            modifiers: Vec::new(),
-                        }))
+                    Ok(ClassMember::Constructor(ConstructorDeclaration {
+                        parameters,
+                        body: Some(body),
+                        modifiers: Vec::new(),
+                        decorators: Vec::new(),
+                    }))
                     } else {
                         // If we can't parse as class member, try to skip the token
                         self.advance();
@@ -1784,6 +1854,60 @@ impl Parser {
         let token = self.current_token().clone();
 
         match token {
+            Token::Identifier(_) => {
+                // This could be a method signature: methodName(params): ReturnType
+                // First, check if there's a '(' after the identifier
+                let name = if let Token::Identifier(name) = self.current_token() {
+                    name.clone()
+                } else {
+                    return Err(CompilerError::parse_error(
+                        1, 1,
+                        "Expected identifier for interface member".to_string(),
+                    ));
+                };
+
+                // Look ahead to see if this is followed by '('
+                if self.position + 1 < self.tokens.len() && self.tokens[self.position + 1] == Token::LeftParen {
+                    // This is a method signature
+                    self.advance(); // consume method name
+                    let parameters = self.parse_parameters()?;
+                    let return_type = if self.current_token() == &Token::Colon {
+                        self.advance();
+                        Some(self.parse_type()?)
+                    } else {
+                        None
+                    };
+                    self.expect_token(&Token::Semicolon)?;
+
+                    Ok(ObjectTypeMember::Method(MethodSignature {
+                        name,
+                        optional: false,
+                        type_parameters: Vec::new(),
+                        parameters,
+                        return_type,
+                    }))
+                } else {
+                    // This is a property signature
+                    self.advance(); // consume property name
+                    let optional = if self.current_token() == &Token::QuestionMark {
+                        self.advance();
+                        true
+                    } else {
+                        false
+                    };
+
+                    self.expect_token(&Token::Colon)?;
+                    let type_annotation = self.parse_type()?;
+                    self.expect_token(&Token::Semicolon)?;
+
+                    Ok(ObjectTypeMember::Property(PropertySignature {
+                        name,
+                        optional,
+                        type_: Some(type_annotation),
+                        readonly,
+                    }))
+                }
+            }
             Token::LeftParen => {
                 // It's a call signature: (x: number, y: number): number;
                 let parameters = self.parse_parameters()?;
@@ -2085,4 +2209,5 @@ impl Parser {
             optional: None,
         })
     }
+
 }

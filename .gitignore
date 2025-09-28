@@ -1,32 +1,38 @@
-# Rust
+# Rust build artifacts
 /target/
-**/*.rs.bk
 Cargo.lock
 
-# IDE
+# IDE files
 .vscode/
 .idea/
 *.swp
 *.swo
-*~
 
-# OS
+# OS files
 .DS_Store
 Thumbs.db
-
-# Build artifacts
-*.exe
-*.dll
-*.so
-*.dylib
-
-# Test outputs
-test_output
-out
-out_dir
-final_output
-complex_output
 
 # Temporary files
 *.tmp
 *.temp
+
+# Build outputs
+bin/
+dist/
+
+# Test artifacts
+test_*.rs
+debug_*.rs
+*_test.rs
+
+# Documentation artifacts
+docs/
+
+# Coverage reports
+*.profraw
+*.profdata
+tarpaulin-report.html
+
+# Backup files
+*.bak
+*.orig

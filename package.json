@@ -2,15 +2,14 @@
 	"name": "typescript-rust-compiler",
 	"version": "0.3.9",
 	"description": "High-performance TypeScript to Rust compiler",
-	"main": "index.js",
 	"bin": {
 		"typescript-rust-compiler": "./bin/typescript-rust-compiler"
 	},
 	"scripts": {
 		"build": "cargo build --release",
 		"test": "cargo test",
-		"install": "cargo build --release && cp target/release/TypeScript-Rust-Compiler bin/",
-		"prepublishOnly": "cargo build --release"
+		"install": "cargo build --release",
+		"clean": "cargo clean"
 	},
 	"keywords": [
 		"typescript",
@@ -30,18 +29,6 @@
 		"url": "https://github.com/FrankFMY/TypeScript-Rust-Compiler/issues"
 	},
 	"homepage": "https://github.com/FrankFMY/TypeScript-Rust-Compiler#readme",
-	"engines": {
-		"node": ">=14.0.0"
-	},
-	"os": [
-		"win32",
-		"darwin",
-		"linux"
-	],
-	"cpu": [
-		"x64",
-		"arm64"
-	],
 	"files": [
 		"bin/",
 		"README.md",

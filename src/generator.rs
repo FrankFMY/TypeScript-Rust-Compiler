@@ -64,19 +64,20 @@ impl CodeGenerator {
                 }
                 Statement::TypeAlias(type_alias) => {
                     let type_code = self.generate_type_alias(type_alias)?;
-        // Check if this is an intersection type that needs additional struct generation
-        if let Type::Intersection { left, right } = &type_alias.type_definition {
-            if let Type::ObjectType(_) = &**left {
-                if let Type::ObjectType(_) = &**right {
-                    // Generate combined struct for intersection
-                    let combined_struct = self.generate_intersection_struct(&type_alias.name, left, right)?;
-                    self.structs.push(combined_struct.clone());
-                    // Return the struct code instead of type alias
-                    return Ok(combined_struct);
-                }
-            }
-        }
-        self.structs.push(type_code);
+                    self.structs.push(type_code.clone());
+
+                    // Check if this is an intersection type that needs additional struct generation
+                    if let Type::Intersection { left, right } = &type_alias.type_definition {
+                        if let Type::ObjectType(_) = &**left {
+                            if let Type::ObjectType(_) = &**right {
+                                // Generate combined struct for intersection
+                                let combined_struct = self.generate_intersection_struct(&type_alias.name, left, right)?;
+                                self.structs.push(combined_struct.clone());
+                                // Return the struct code instead of type alias
+                                return Ok(combined_struct);
+                            }
+                        }
+                    }
                 }
                 Statement::EnumDeclaration(enum_decl) => {
                     let enum_code = self.generate_enum(enum_decl)?;
@@ -279,6 +280,10 @@ impl TypeScriptObject for HashMap<String, Any> {
                     let setter_code = self.generate_setter(setter)?;
                     methods.push(setter_code);
                 }
+                ClassMember::Decorator(decorator) => {
+                    // For now, just add a comment about the decorator
+                    methods.push(format!("    // Decorator: {}", decorator));
+                }
                 _ => {
                     // Handle other member types
                 }
@@ -404,7 +409,7 @@ impl TypeScriptObject for HashMap<String, Any> {
             params.push(format!("{}: {}", param_name, param_type));
         }
         
-        let body = if let Some(ref body) = constructor.body {
+        let _body = if let Some(ref body) = constructor.body {
             self.generate_statement(body)?
         } else {
             "// Empty constructor".to_string()
@@ -463,7 +468,13 @@ impl TypeScriptObject for HashMap<String, Any> {
             format!("        Self {{\n{}\n        }}", field_assignments.join(",\n"))
         };
         
-        Ok(format!("    pub fn new({}) -> Self {{\n{}\n    }}", params.join(", "), initialization))
+        let decorators_str = if constructor.decorators.is_empty() {
+            String::new()
+        } else {
+            format!("    // Decorators: {}\n", constructor.decorators.join(", "))
+        };
+
+        Ok(format!("{}{}    pub fn new({}) -> Self {{\n{}\n    }}", decorators_str, "    ", params.join(", "), initialization))
     }
 
     /// Generate getter
@@ -481,7 +492,13 @@ impl TypeScriptObject for HashMap<String, Any> {
             "// Empty getter".to_string()
         };
         
-        Ok(format!("    pub fn {}(&self) -> {} {{\n{}\n    }}", name, return_type, body))
+        let decorators_str = if getter.decorators.is_empty() {
+            String::new()
+        } else {
+            format!("    // Decorators: {}\n", getter.decorators.join(", "))
+        };
+
+        Ok(format!("{}{}    pub fn {}(&self) -> {} {{\n{}\n    }}", decorators_str, "    ", name, return_type, body))
     }
 
     /// Generate setter
@@ -499,7 +516,13 @@ impl TypeScriptObject for HashMap<String, Any> {
             "// Empty setter".to_string()
         };
         
-        Ok(format!("    pub fn set_{}(&mut self, value: {}) {{\n{}\n    }}", name, param_type, body))
+        let decorators_str = if setter.decorators.is_empty() {
+            String::new()
+        } else {
+            format!("    // Decorators: {}\n", setter.decorators.join(", "))
+        };
+
+        Ok(format!("{}{}    pub fn set_{}(&mut self, value: {}) {{\n{}\n    }}", decorators_str, "    ", name, param_type, body))
     }
 
     /// Generate block statement
@@ -695,21 +718,24 @@ impl TypeScriptObject for HashMap<String, Any> {
             "unimplemented!()".to_string()
         };
 
-        // Clean up parameters - remove trailing comma if empty
-        let clean_params = if params.trim().is_empty() {
-            "".to_string()
+        let decorators_str = if method.decorators.is_empty() {
+            String::new()
         } else {
-            params
+            format!("    // Decorators: {}\n", method.decorators.join(", "))
         };
-        
-        Ok(format!(
-            "    pub fn {}(&self{}{}){}{{\n        {}\n    }}",
-            name, 
-            if clean_params.is_empty() { "" } else { ", " },
-            clean_params, 
-            return_type, 
-            body
-        ))
+
+        // Build the method signature
+        let mut method_sig = String::new();
+        method_sig.push_str(&decorators_str);
+        method_sig.push_str("    pub fn ");
+        method_sig.push_str(name);
+        method_sig.push_str("(&self)");
+        method_sig.push_str(&return_type);
+        method_sig.push_str(" {\n        ");
+        method_sig.push_str(&body);
+        method_sig.push_str("\n    }");
+
+        Ok(method_sig)
     }
 
     /// Generate method signature
@@ -745,7 +771,9 @@ impl TypeScriptObject for HashMap<String, Any> {
             param_strings.push(param_def);
         }
 
-        Ok(param_strings.join(", "))
+        let result = param_strings.join(", ");
+        println!("DEBUG: generate_parameters result: '{}'", result);
+        Ok(result)
     }
 
     /// Generate statement
@@ -811,6 +839,7 @@ impl TypeScriptObject for HashMap<String, Any> {
             Expression::Assignment(assignment) => self.generate_assignment_expression(assignment),
             Expression::This(_) => Ok("self".to_string()),
             Expression::Super(_) => Ok("super".to_string()),
+            Expression::Arrow(arrow) => self.generate_arrow_function(arrow),
             _ => {
                 // Handle other expression types
                 Ok("// TODO: Implement expression".to_string())
@@ -997,5 +1026,12 @@ impl TypeScriptObject for HashMap<String, Any> {
                 token
             ))),
         }
+    }
+
+    /// Generate arrow function expression
+    fn generate_arrow_function(&mut self, _arrow: &ArrowFunctionExpression) -> Result<String> {
+        // For now, generate a simple closure
+        // TODO: Implement proper arrow function generation
+        Ok("|| { unimplemented!() }".to_string())
     }
 }

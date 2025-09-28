@@ -429,7 +429,7 @@ pub enum Type {
     Generic(GenericType),
     GenericNamed {
         name: String,
-        type_parameters: Vec<TypeParameter>,
+        type_arguments: Vec<Type>,
     },
 
     // Union and intersection types
@@ -636,6 +636,7 @@ pub enum ClassMember {
     Getter(GetterDeclaration),
     Setter(SetterDeclaration),
     Index(IndexSignature),
+    Decorator(String), // For decorator support
 }
 
 /// Property declaration
@@ -646,6 +647,7 @@ pub struct PropertyDeclaration {
     pub type_: Option<Type>,
     pub initializer: Option<Expression>,
     pub modifiers: Vec<Modifier>,
+    pub decorators: Vec<String>,
 }
 
 /// Method declaration
@@ -658,6 +660,7 @@ pub struct MethodDeclaration {
     pub return_type: Option<Type>,
     pub body: Option<Statement>,
     pub modifiers: Vec<Modifier>,
+    pub decorators: Vec<String>,
 }
 
 /// Constructor declaration
@@ -666,6 +669,7 @@ pub struct ConstructorDeclaration {
     pub parameters: Vec<Parameter>,
     pub body: Option<Statement>,
     pub modifiers: Vec<Modifier>,
+    pub decorators: Vec<String>,
 }
 
 /// Getter declaration
@@ -675,6 +679,7 @@ pub struct GetterDeclaration {
     pub type_: Option<Type>,
     pub body: Option<Statement>,
     pub modifiers: Vec<Modifier>,
+    pub decorators: Vec<String>,
 }
 
 /// Setter declaration
@@ -684,6 +689,7 @@ pub struct SetterDeclaration {
     pub parameter: Parameter,
     pub body: Option<Statement>,
     pub modifiers: Vec<Modifier>,
+    pub decorators: Vec<String>,
 }
 
 /// Interface body
