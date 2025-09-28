@@ -36,6 +36,7 @@ pub enum Token {
     Or,
     Not,
     Assign,
+    Arrow, // =>
     PlusAssign,
     MinusAssign,
     MultiplyAssign,
@@ -55,7 +56,6 @@ pub enum Token {
     Dot,
     Colon,
     QuestionMark,
-    Arrow,
 
     // Type annotations
     TypeAnnotation,
@@ -280,6 +280,9 @@ impl Lexer {
                     } else {
                         Ok(Some(Token::Equal))
                     }
+                } else if self.peek_char() == Some('>') {
+                    self.advance();
+                    Ok(Some(Token::Arrow))
                 } else {
                     Ok(Some(Token::Assign))
                 }
@@ -579,7 +582,7 @@ impl Lexer {
             }
         }
 
-        // Check if it's a boolean literal
+        // Check if it's a literal
         if value == "true" {
             Ok(Some(Token::Boolean(true)))
         } else if value == "false" {

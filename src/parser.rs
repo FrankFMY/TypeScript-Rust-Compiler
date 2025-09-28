@@ -58,6 +58,7 @@ impl Parser {
                 crate::lexer::Keyword::Module => self.parse_module_declaration()?,
                 crate::lexer::Keyword::Declare => self.parse_declare_statement()?,
                 crate::lexer::Keyword::Return => self.parse_return_statement()?,
+                crate::lexer::Keyword::Throw => self.parse_throw_statement()?,
                 crate::lexer::Keyword::If => self.parse_if_statement()?,
                 crate::lexer::Keyword::Else => self.parse_expression_statement()?,
                 _ => self.parse_expression_statement()?,
@@ -284,6 +285,20 @@ impl Parser {
         }
 
         Ok(Statement::ReturnStatement(ReturnStatement { argument }))
+    }
+
+    /// Parse throw statement
+    fn parse_throw_statement(&mut self) -> Result<Statement> {
+        self.expect_keyword()?; // throw
+
+        let argument = self.parse_expression()?;
+
+        // Optional semicolon
+        if self.current_token() == &Token::Semicolon {
+            self.advance();
+        }
+
+        Ok(Statement::ThrowStatement(ThrowStatement { argument }))
     }
 
     /// Parse expression statement
@@ -552,6 +567,14 @@ impl Parser {
                 self.advance();
                 Ok(Expression::Literal(Literal::Undefined))
             }
+            Token::Keyword(crate::lexer::Keyword::Null) => {
+                self.advance();
+                Ok(Expression::Literal(Literal::Null))
+            }
+            Token::Keyword(crate::lexer::Keyword::Undefined) => {
+                self.advance();
+                Ok(Expression::Literal(Literal::Undefined))
+            }
             Token::Identifier(name) => {
                 self.advance();
                 Ok(Expression::Identifier(name))
@@ -577,12 +600,51 @@ impl Parser {
                 }))
             }
             Token::LeftParen => {
-                self.advance();
-                let expression = self.parse_expression()?;
-                self.expect_token(&Token::RightParen)?;
-                Ok(Expression::Parenthesized(ParenthesizedExpression {
-                    expression: Box::new(expression),
-                }))
+                // Look ahead to see if this is an arrow function
+                let mut pos = self.position + 1;
+                let mut paren_count = 1;
+                
+                // Skip to matching closing paren
+                while pos < self.tokens.len() && paren_count > 0 {
+                    match &self.tokens[pos] {
+                        Token::LeftParen => paren_count += 1,
+                        Token::RightParen => paren_count -= 1,
+                        _ => {}
+                    }
+                    pos += 1;
+                }
+                
+                // Check if next token is arrow
+                if pos < self.tokens.len() && self.tokens[pos] == Token::Arrow {
+                    // This is an arrow function
+                    self.advance(); // consume (
+                    let parameters = self.parse_parameter_list()?;
+                    self.expect_token(&Token::RightParen)?;
+                    self.expect_token(&Token::Arrow)?;
+                    let body = if self.current_token() == &Token::LeftBrace {
+                        self.parse_block_statement()?
+                    } else {
+                        let expr = self.parse_expression()?;
+                        Statement::ExpressionStatement(ExpressionStatement {
+                            expression: expr,
+                        })
+                    };
+                    
+                    Ok(Expression::Arrow(Box::new(ArrowFunctionExpression {
+                        type_parameters: Vec::new(),
+                        parameters,
+                        return_type: None,
+                        body: Box::new(body),
+                    })))
+                } else {
+                    // Regular parenthesized expression
+                    self.advance();
+                    let expression = self.parse_expression()?;
+                    self.expect_token(&Token::RightParen)?;
+                    Ok(Expression::Parenthesized(ParenthesizedExpression {
+                        expression: Box::new(expression),
+                    }))
+                }
             }
             Token::LeftBrace => self.parse_object_expression(),
             Token::LeftBracket => self.parse_array_expression(),
@@ -727,7 +789,7 @@ impl Parser {
             }
             Token::Keyword(crate::lexer::Keyword::Keyof) => {
                 self.advance();
-                let target_type = self.parse_primary_type()?;
+                let _target_type = self.parse_primary_type()?;
                 Ok(Type::String) // keyof T -> string for now
             }
             Token::Keyword(crate::lexer::Keyword::Key) => {
@@ -741,6 +803,10 @@ impl Parser {
             Token::Keyword(crate::lexer::Keyword::Null) => {
                 self.advance();
                 Ok(Type::Null) // null -> null for now
+            }
+            Token::Keyword(crate::lexer::Keyword::Undefined) => {
+                self.advance();
+                Ok(Type::Undefined) // undefined -> undefined for now
             }
             Token::Identifier(name) => {
                 self.advance();
@@ -931,7 +997,6 @@ impl Parser {
     }
 
     fn parse_parameters(&mut self) -> Result<Vec<Parameter>> {
-        println!("Current token: {:?}", self.current_token());
         self.expect_token(&Token::LeftParen)?;
         let mut parameters = Vec::new();
 
@@ -972,6 +1037,48 @@ impl Parser {
         }
 
         self.expect_token(&Token::RightParen)?;
+        Ok(parameters)
+    }
+    
+    fn parse_parameter_list(&mut self) -> Result<Vec<Parameter>> {
+        let mut parameters = Vec::new();
+
+        while self.current_token() != &Token::RightParen {
+            let name = self.expect_identifier()?;
+            let optional = if self.current_token() == &Token::QuestionMark {
+                self.advance();
+                true
+            } else {
+                false
+            };
+
+            let type_annotation = if self.current_token() == &Token::Colon {
+                self.advance();
+                Some(self.parse_type()?)
+            } else {
+                None
+            };
+
+            let initializer = if self.current_token() == &Token::Assign {
+                self.advance();
+                Some(self.parse_expression()?)
+            } else {
+                None
+            };
+
+            parameters.push(Parameter {
+                name,
+                optional,
+                type_: type_annotation.map(Box::new),
+                initializer,
+                rest: false,
+            });
+
+            if self.current_token() == &Token::Comma {
+                self.advance();
+            }
+        }
+
         Ok(parameters)
     }
 
@@ -1095,6 +1202,31 @@ impl Parser {
     }
 
     fn parse_class_member(&mut self) -> Result<ClassMember> {
+        let mut modifiers = Vec::new();
+        
+        // Parse access modifiers
+        while let Token::Keyword(keyword) = self.current_token() {
+            match keyword {
+                crate::lexer::Keyword::Public => {
+                    modifiers.push(crate::ast::Modifier::Public);
+                    self.advance();
+                }
+                crate::lexer::Keyword::Private => {
+                    modifiers.push(crate::ast::Modifier::Private);
+                    self.advance();
+                }
+                crate::lexer::Keyword::Protected => {
+                    modifiers.push(crate::ast::Modifier::Protected);
+                    self.advance();
+                }
+                crate::lexer::Keyword::Readonly => {
+                    modifiers.push(crate::ast::Modifier::Readonly);
+                    self.advance();
+                }
+                _ => break,
+            }
+        }
+
         let token = self.current_token().clone();
 
         match token {
@@ -1120,20 +1252,28 @@ impl Parser {
                         parameters,
                         return_type,
                         body: Some(body),
-                        modifiers: Vec::new(),
+                        modifiers,
                     }))
                 } else if self.current_token() == &Token::Colon {
                     // It's a property
                     self.advance();
                     let type_annotation = self.parse_type()?;
+                    
+                    let initializer = if self.current_token() == &Token::Assign {
+                        self.advance();
+                        Some(self.parse_expression()?)
+                    } else {
+                        None
+                    };
+                    
                     self.expect_token(&Token::Semicolon)?;
 
                     Ok(ClassMember::Property(PropertyDeclaration {
                         name,
                         optional: false,
                         type_: Some(type_annotation),
-                        initializer: None,
-                        modifiers: Vec::new(),
+                        initializer,
+                        modifiers,
                     }))
                 } else {
                     // It's a constructor
@@ -1164,6 +1304,14 @@ impl Parser {
     }
 
     fn parse_interface_member(&mut self) -> Result<ObjectTypeMember> {
+        let mut readonly = false;
+        
+        // Check for readonly modifier
+        if let Token::Keyword(crate::lexer::Keyword::Readonly) = self.current_token() {
+            readonly = true;
+            self.advance();
+        }
+        
         let token = self.current_token().clone();
 
         match token {
@@ -1198,7 +1346,7 @@ impl Parser {
                         name,
                         optional: false,
                         type_: Some(type_annotation),
-                        readonly: false,
+                        readonly,
                     }))
                 } else {
                     Err(CompilerError::parse_error(

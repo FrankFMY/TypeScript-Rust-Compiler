@@ -120,7 +120,7 @@ impl Compiler {
         format!(
             r#"[package]
 name = "generated_rust_project"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2021"
 
 [dependencies]
