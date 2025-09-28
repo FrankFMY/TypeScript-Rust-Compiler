@@ -1,0 +1,6 @@
+use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
+
+
+
+let mixedArray: Vec<Result<String, f64>> = vec!["a", 1, "b", 2];

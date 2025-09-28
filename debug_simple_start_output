@@ -1,0 +1,10 @@
+use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
+
+
+
+let primitiveString: String = "Hello World";
+
+let primitiveNumber: f64 = 42;
+
+let primitiveBoolean: bool = true;

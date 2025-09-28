@@ -45,8 +45,21 @@ impl Parser {
             Token::EOF => return Ok(None),
             Token::Keyword(keyword) => match keyword {
                 crate::lexer::Keyword::Let
-                | crate::lexer::Keyword::Const
                 | crate::lexer::Keyword::Var => self.parse_variable_declaration()?,
+                crate::lexer::Keyword::Const => {
+                    // Check if this is "const enum"
+                    if self.position + 1 < self.tokens.len() {
+                        if let Token::Keyword(crate::lexer::Keyword::Enum) = &self.tokens[self.position + 1] {
+                            // This is "const enum", parse as enum declaration
+                            self.parse_const_enum_declaration()?
+                        } else {
+                            // This is regular "const", parse as variable declaration
+                            self.parse_variable_declaration()?
+                        }
+                    } else {
+                        self.parse_variable_declaration()?
+                    }
+                },
                 crate::lexer::Keyword::Function => self.parse_function_declaration()?,
                 crate::lexer::Keyword::Class => self.parse_class_declaration()?,
                 crate::lexer::Keyword::Interface => self.parse_interface_declaration()?,
@@ -186,6 +199,20 @@ impl Parser {
         let name = self.expect_identifier()?;
         let members = self.parse_enum_members()?;
 
+        Ok(Statement::EnumDeclaration(EnumDeclaration {
+            name,
+            members,
+        }))
+    }
+
+    fn parse_const_enum_declaration(&mut self) -> Result<Statement> {
+        self.expect_keyword()?; // consume 'const' keyword
+        self.expect_keyword()?; // consume 'enum' keyword
+        let name = self.expect_identifier()?;
+        let members = self.parse_enum_members()?;
+
+        // For now, treat const enum the same as regular enum
+        // In a full implementation, we'd have a ConstEnumDeclaration type
         Ok(Statement::EnumDeclaration(EnumDeclaration {
             name,
             members,
@@ -735,6 +762,13 @@ impl Parser {
             };
         }
         
+        // Handle array types: T[]
+        while self.current_token() == &Token::LeftBracket {
+            self.advance(); // consume [
+            self.expect_token(&Token::RightBracket)?; // consume ]
+            left_type = Type::Array(Box::new(left_type));
+        }
+        
         Ok(left_type)
     }
     
@@ -825,7 +859,7 @@ impl Parser {
                 self.advance();
                 let type_ = self.parse_type()?;
                 self.expect_token(&Token::RightParen)?;
-                Ok(Type::Parenthesized(Box::new(type_)))
+                Ok(type_)
             }
             _ => Err(CompilerError::parse_error(
                 self.position,
@@ -1001,6 +1035,21 @@ impl Parser {
         let mut parameters = Vec::new();
 
         while self.current_token() != &Token::RightParen {
+            // Handle access modifiers on parameters (TypeScript feature)
+            let mut _modifiers = Vec::new();
+            while let Token::Keyword(keyword) = self.current_token() {
+                match keyword {
+                    crate::lexer::Keyword::Public | 
+                    crate::lexer::Keyword::Private | 
+                    crate::lexer::Keyword::Protected | 
+                    crate::lexer::Keyword::Readonly => {
+                        _modifiers.push(keyword.clone());
+                        self.advance();
+                    }
+                    _ => break,
+                }
+            }
+            
             let name = self.expect_identifier()?;
             let optional = if self.current_token() == &Token::QuestionMark {
                 self.advance();
@@ -1044,6 +1093,21 @@ impl Parser {
         let mut parameters = Vec::new();
 
         while self.current_token() != &Token::RightParen {
+            // Handle access modifiers on parameters (TypeScript feature)
+            let mut _modifiers = Vec::new();
+            while let Token::Keyword(keyword) = self.current_token() {
+                match keyword {
+                    crate::lexer::Keyword::Public | 
+                    crate::lexer::Keyword::Private | 
+                    crate::lexer::Keyword::Protected | 
+                    crate::lexer::Keyword::Readonly => {
+                        _modifiers.push(keyword.clone());
+                        self.advance();
+                    }
+                    _ => break,
+                }
+            }
+            
             let name = self.expect_identifier()?;
             let optional = if self.current_token() == &Token::QuestionMark {
                 self.advance();
@@ -1130,7 +1194,6 @@ impl Parser {
             let member = self.parse_interface_member()?;
             members.push(member);
         }
-
         self.expect_token(&Token::RightBrace)?;
         Ok(InterfaceBody { members })
     }
@@ -1310,13 +1373,110 @@ impl Parser {
         if let Token::Keyword(crate::lexer::Keyword::Readonly) = self.current_token() {
             readonly = true;
             self.advance();
+            
+            // Check if the next token is also 'readonly' (property name)
+            if let Token::Keyword(crate::lexer::Keyword::Readonly) = self.current_token() {
+                // Handle case where readonly is both modifier and property name: readonly readonly: boolean;
+                let name = "readonly".to_string();
+                self.advance(); // consume the property name 'readonly'
+                
+                if self.current_token() == &Token::Colon {
+                    // It's a property signature
+                    self.advance();
+                    let type_annotation = self.parse_type()?;
+                    self.expect_token(&Token::Semicolon)?;
+
+                    return Ok(ObjectTypeMember::Property(PropertySignature {
+                        name,
+                        optional: false,
+                        type_: Some(type_annotation),
+                        readonly,
+                    }));
+                } else {
+                    return Err(CompilerError::parse_error(
+                        1, 1,
+                        "Expected colon after property name".to_string(),
+                    ));
+                }
+            }
         }
         
         let token = self.current_token().clone();
 
         match token {
+            Token::LeftParen => {
+                // It's a call signature: (x: number, y: number): number;
+                let parameters = self.parse_parameters()?;
+                let return_type = if self.current_token() == &Token::Colon {
+                    self.advance();
+                    Some(self.parse_type()?)
+                } else {
+                    None
+                };
+                self.expect_token(&Token::Semicolon)?;
+
+                Ok(ObjectTypeMember::Method(MethodSignature {
+                    name: "call".to_string(), // Use a default name for call signatures
+                    optional: false,
+                    type_parameters: Vec::new(),
+                    parameters,
+                    return_type,
+                }))
+            }
+            Token::Keyword(crate::lexer::Keyword::New) => {
+                // It's a construct signature: new (name: string): BasicInterface;
+                self.advance(); // consume 'new'
+                let parameters = self.parse_parameters()?;
+                let return_type = if self.current_token() == &Token::Colon {
+                    self.advance();
+                    Some(self.parse_type()?)
+                } else {
+                    None
+                };
+                self.expect_token(&Token::Semicolon)?;
+
+                Ok(ObjectTypeMember::Method(MethodSignature {
+                    name: "constructor".to_string(), // Use a default name for construct signatures
+                    optional: false,
+                    type_parameters: Vec::new(),
+                    parameters,
+                    return_type,
+                }))
+            }
+            Token::Keyword(crate::lexer::Keyword::Readonly) => {
+                // Handle case where readonly is the property name (without modifier)
+                let name = "readonly".to_string();
+                self.advance();
+                
+                if self.current_token() == &Token::Colon {
+                    // It's a property signature
+                    self.advance();
+                    let type_annotation = self.parse_type()?;
+                    self.expect_token(&Token::Semicolon)?;
+
+                    Ok(ObjectTypeMember::Property(PropertySignature {
+                        name,
+                        optional: false,
+                        type_: Some(type_annotation),
+                        readonly,
+                    }))
+                } else {
+                    Err(CompilerError::parse_error(
+                        1, 1,
+                        "Expected colon after property name".to_string(),
+                    ))
+                }
+            }
             Token::Identifier(name) => {
                 self.advance();
+                
+                // Check for optional marker
+                let optional = if self.current_token() == &Token::QuestionMark {
+                    self.advance();
+                    true
+                } else {
+                    false
+                };
 
                 if self.current_token() == &Token::LeftParen {
                     // It's a method signature
@@ -1331,7 +1491,7 @@ impl Parser {
 
                     Ok(ObjectTypeMember::Method(MethodSignature {
                         name,
-                        optional: false,
+                        optional,
                         type_parameters: Vec::new(),
                         parameters,
                         return_type,
@@ -1344,7 +1504,7 @@ impl Parser {
 
                     Ok(ObjectTypeMember::Property(PropertySignature {
                         name,
-                        optional: false,
+                        optional,
                         type_: Some(type_annotation),
                         readonly,
                     }))
