@@ -10,9 +10,6 @@ pub struct BasicClass {
 
 
 impl BasicClass {
-    pub fn constructor(&self, ) -> (){
-        // TODO: Implement expression;
-    }
     pub fn publicMethod(&self, ) -> String{
         return // TODO: Implement expression.publicProp;
     }

@@ -1,6 +1,6 @@
 [package]
 name = "TypeScript-Rust-Compiler"
-version = "0.3.5"
+version = "0.3.6"
 edition = "2021"
 authors = ["FrankFMY <pryanishnikovartem@gmail.com>"]
 description = "High-performance TypeScript to Rust compiler"

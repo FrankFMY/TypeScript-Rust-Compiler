@@ -40,6 +40,11 @@ impl Parser {
             return Ok(None);
         }
 
+        // Check if we've reached EOF
+        if self.current_token() == &Token::EOF {
+            return Ok(None);
+        }
+
         let token = &self.tokens[self.position];
         let statement = match token {
             Token::EOF => return Ok(None),
