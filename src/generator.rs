@@ -89,6 +89,10 @@ impl CodeGenerator {
                     let module_code = self.generate_module(module)?;
                     self.modules.push(module_code);
                 }
+                Statement::ExpressionStatement(expr_stmt) => {
+                    let expr_code = self.generate_expression(&expr_stmt.expression)?;
+                    self.functions.push(expr_code);
+                }
                 _ => {
                     // Handle other statement types
                 }
@@ -324,7 +328,7 @@ impl TypeScriptObject for HashMap<String, Any> {
             String::new()
         };
 
-        Ok(format!("let {}: {} = {};", name, var_type, initializer))
+        Ok(format!("let {}: {}{};", name, var_type, initializer))
     }
 
     /// Generate import
@@ -436,10 +440,12 @@ impl TypeScriptObject for HashMap<String, Any> {
                 for stmt in &block.statements {
                     statements.push(self.generate_statement(stmt)?);
                 }
-                Ok(format!("{{\n    {}\n}}", statements.join("\n    ")))
+                Ok(statements.join("\n    "))
             }
             Statement::ExpressionStatement(expr_stmt) => {
-                Ok(self.generate_expression(&expr_stmt.expression)?)
+                let expr = self.generate_expression(&expr_stmt.expression)?;
+                // Add semicolon for all statements
+                Ok(format!("{};", expr))
             }
             Statement::ReturnStatement(ret) => {
                 if let Some(ref arg) = ret.argument {
@@ -467,6 +473,8 @@ impl TypeScriptObject for HashMap<String, Any> {
             Expression::Member(member) => self.generate_member_expression(member),
             Expression::Array(array) => self.generate_array_expression(array),
             Expression::Object(object) => self.generate_object_expression(object),
+            Expression::Template(template) => self.generate_template_literal(template),
+            Expression::New(new_expr) => self.generate_new_expression(new_expr),
             _ => {
                 // Handle other expression types
                 Ok("// TODO: Implement expression".to_string())
@@ -508,7 +516,18 @@ impl TypeScriptObject for HashMap<String, Any> {
         for arg in &call.arguments {
             args.push(self.generate_expression(arg)?);
         }
-        Ok(format!("{}({})", callee, args.join(", ")))
+        
+        // Special handling for console.log
+        if callee == "console.log" {
+            if args.len() == 1 {
+                Ok(format!("println!(\"{{}}\", {})", args[0]))
+            } else {
+                let format_string = args.iter().map(|_| "{}").collect::<Vec<_>>().join(" ");
+                Ok(format!("println!(\"{}\", {})", format_string, args.join(", ")))
+            }
+        } else {
+            Ok(format!("{}({})", callee, args.join(", ")))
+        }
     }
 
     /// Generate member expression
@@ -544,7 +563,24 @@ impl TypeScriptObject for HashMap<String, Any> {
             let value = self.generate_expression(&property.value)?;
             fields.push(format!("{}: {}", key, value));
         }
-        Ok(format!("HashMap::from([{}])", fields.join(", ")))
+        Ok(format!("{{\n        {}\n    }}", fields.join(",\n        ")))
+    }
+
+    /// Generate template literal
+    fn generate_template_literal(&mut self, template: &TemplateLiteral) -> Result<String> {
+        // For simple template literals, just return the string with proper escaping
+        let raw_string = template.quasis[0].value.replace("${name}", "{}");
+        Ok(format!("\"{}\"", raw_string))
+    }
+
+    /// Generate new expression
+    fn generate_new_expression(&mut self, new_expr: &NewExpression) -> Result<String> {
+        let callee = self.generate_expression(&new_expr.callee)?;
+        let mut args = Vec::new();
+        for arg in &new_expr.arguments {
+            args.push(self.generate_expression(arg)?);
+        }
+        Ok(format!("{}::new({})", callee, args.join(", ")))
     }
 
     /// Map operator

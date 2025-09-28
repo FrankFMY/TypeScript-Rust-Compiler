@@ -71,6 +71,10 @@ impl Compiler {
             // Generate multiple files
             self.write_multiple_files(output, rust_code)?;
         } else {
+            // Create parent directory if it doesn't exist
+            if let Some(parent) = output.parent() {
+                fs::create_dir_all(parent).map_err(CompilerError::Io)?;
+            }
             // Write single file
             fs::write(output, rust_code).map_err(CompilerError::Io)?;
         }
@@ -116,7 +120,7 @@ impl Compiler {
         format!(
             r#"[package]
 name = "generated_rust_project"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2021"
 
 [dependencies]

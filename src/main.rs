@@ -52,8 +52,9 @@ fn main() -> Result<()> {
         .with_optimization(cli.optimize)
         .with_runtime(cli.runtime);
 
-    // Test lexer (only in debug mode)
+    // Test lexer (only in debug mode) - moved to separate function
     if cli.debug {
+        println!("Debug mode: Testing lexer with sample code");
         TypeScript_Rust_Compiler::test_lexer::test_lexer();
     }
 

@@ -404,6 +404,25 @@ impl Lexer {
             let ch = self.current_char();
             if ch.is_whitespace() {
                 self.advance();
+            } else if ch == '/' && self.peek_char() == Some('/') {
+                // Skip line comment
+                self.advance(); // skip first /
+                self.advance(); // skip second /
+                while self.position < self.input.len() && self.current_char() != '\n' {
+                    self.advance();
+                }
+            } else if ch == '/' && self.peek_char() == Some('*') {
+                // Skip block comment
+                self.advance(); // skip /
+                self.advance(); // skip *
+                while self.position < self.input.len() {
+                    if self.current_char() == '*' && self.peek_char() == Some('/') {
+                        self.advance(); // skip *
+                        self.advance(); // skip /
+                        break;
+                    }
+                    self.advance();
+                }
             } else {
                 break;
             }
