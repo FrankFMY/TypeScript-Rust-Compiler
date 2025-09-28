@@ -238,11 +238,7 @@ impl TypeScriptObject for HashMap<String, Any> {
             fields.join(",\n")
         );
 
-        let impl_code = format!(
-            "impl {} {{\n{}\n}}",
-            name,
-            methods.join("\n")
-        );
+        let impl_code = format!("impl {} {{\n{}\n}}", name, methods.join("\n"));
 
         Ok((struct_code, impl_code))
     }
@@ -262,7 +258,8 @@ impl TypeScriptObject for HashMap<String, Any> {
                     };
 
                     let getter = format!("    fn get_{}(&self) -> {};", prop.name, prop_type);
-                    let setter = format!("    fn set_{}(&mut self, value: {});", prop.name, prop_type);
+                    let setter =
+                        format!("    fn set_{}(&mut self, value: {});", prop.name, prop_type);
                     methods.push(getter);
                     methods.push(setter);
                 }
@@ -451,9 +448,7 @@ impl TypeScriptObject for HashMap<String, Any> {
                     Ok("return;".to_string())
                 }
             }
-            Statement::VariableDeclaration(var) => {
-                self.generate_variable(var)
-            }
+            Statement::VariableDeclaration(var) => self.generate_variable(var),
             _ => {
                 // Handle other statement types
                 Ok("// TODO: Implement statement".to_string())
@@ -520,7 +515,7 @@ impl TypeScriptObject for HashMap<String, Any> {
     fn generate_member_expression(&mut self, member: &MemberExpression) -> Result<String> {
         let object = self.generate_expression(&member.object)?;
         let property = self.generate_expression(&member.property)?;
-        
+
         if member.computed {
             Ok(format!("{}[{}]", object, property))
         } else {

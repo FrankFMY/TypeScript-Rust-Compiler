@@ -1,5 +1,5 @@
 {
-	"name": "TypeScript-Rust-Compiler",
+	"name": "typescript-rust-compiler",
 	"version": "0.1.5",
 	"description": "High-performance TypeScript to Rust compiler",
 	"main": "index.js",

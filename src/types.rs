@@ -18,7 +18,7 @@ impl TypeMapper {
     /// Create a new type mapper
     pub fn new(runtime: bool) -> Self {
         let mut type_mappings = HashMap::new();
-        
+
         // Primitive type mappings
         type_mappings.insert("string".to_string(), "String".to_string());
         type_mappings.insert("number".to_string(), "f64".to_string());
@@ -81,7 +81,10 @@ impl TypeMapper {
 
             // Generic types
             Type::Generic(generic) => self.map_generic_type(generic),
-            Type::GenericNamed { name, type_parameters } => {
+            Type::GenericNamed {
+                name,
+                type_parameters,
+            } => {
                 let rust_name = self.map_named_type(name)?;
                 if type_parameters.is_empty() {
                     Ok(rust_name)
@@ -164,7 +167,7 @@ impl TypeMapper {
             .map(|t| self.map_type(t))
             .collect();
         let type_args = type_args?;
-        
+
         if type_args.is_empty() {
             Ok(base_type)
         } else {
@@ -189,7 +192,10 @@ impl TypeMapper {
             enum_variants.push(format!("Variant{}({})", i, rust_type));
         }
 
-        Ok(format!("UnionType {{\n    {}\n}}", enum_variants.join(",\n    ")))
+        Ok(format!(
+            "UnionType {{\n    {}\n}}",
+            enum_variants.join(",\n    ")
+        ))
     }
 
     /// Map intersection type
@@ -203,10 +209,7 @@ impl TypeMapper {
         }
 
         // Convert intersection to trait bounds
-        let rust_types: Result<Vec<String>> = types
-            .iter()
-            .map(|t| self.map_type(t))
-            .collect();
+        let rust_types: Result<Vec<String>> = types.iter().map(|t| self.map_type(t)).collect();
         let rust_types = rust_types?;
 
         Ok(format!("({})", rust_types.join(" + ")))
@@ -218,10 +221,7 @@ impl TypeMapper {
             return Ok("()".to_string());
         }
 
-        let rust_types: Result<Vec<String>> = types
-            .iter()
-            .map(|t| self.map_type(t))
-            .collect();
+        let rust_types: Result<Vec<String>> = types.iter().map(|t| self.map_type(t)).collect();
         let rust_types = rust_types?;
 
         Ok(format!("({})", rust_types.join(", ")))
@@ -251,7 +251,7 @@ impl TypeMapper {
     /// Map object type
     fn map_object_type(&mut self, obj_type: &ObjectType) -> Result<String> {
         let mut struct_fields = Vec::new();
-        
+
         for member in &obj_type.members {
             match member {
                 ObjectTypeMember::Property(prop) => {
@@ -260,13 +260,13 @@ impl TypeMapper {
                     } else {
                         "Box<dyn Any>".to_string()
                     };
-                    
+
                     let field_name = if prop.optional {
                         format!("{}: Option<{}>", prop.name, field_type)
                     } else {
                         format!("{}: {}", prop.name, field_type)
                     };
-                    
+
                     struct_fields.push(field_name);
                 }
                 ObjectTypeMember::Method(method) => {
@@ -293,7 +293,9 @@ impl TypeMapper {
 
                     struct_fields.push(format!(
                         "fn {}({}) -> {}",
-                        method.name, params.join(", "), return_type
+                        method.name,
+                        params.join(", "),
+                        return_type
                     ));
                 }
                 _ => {
@@ -302,12 +304,21 @@ impl TypeMapper {
             }
         }
 
-        Ok(format!("struct ObjectType {{\n    {}\n}}", struct_fields.join(",\n    ")))
+        Ok(format!(
+            "struct ObjectType {{\n    {}\n}}",
+            struct_fields.join(",\n    ")
+        ))
     }
 
     /// Map index signature
     fn map_index_signature(&mut self, index_sig: &IndexSignature) -> Result<String> {
-        let key_type = self.map_type(&index_sig.parameter.type_.as_ref().map_or(Type::String, |v| *v.clone()))?;
+        let key_type = self.map_type(
+            &index_sig
+                .parameter
+                .type_
+                .as_ref()
+                .map_or(Type::String, |v| *v.clone()),
+        )?;
         let value_type = self.map_type(&index_sig.type_)?;
         Ok(format!("HashMap<{}, {}>", key_type, value_type))
     }
@@ -315,7 +326,13 @@ impl TypeMapper {
     /// Map mapped type
     fn map_mapped_type(&mut self, mapped: &MappedType) -> Result<String> {
         // Convert mapped type to generic struct
-        let key_type = self.map_type(&mapped.type_parameter.constraint.as_ref().map_or(Type::String, |v| *v.clone()))?;
+        let key_type = self.map_type(
+            &mapped
+                .type_parameter
+                .constraint
+                .as_ref()
+                .map_or(Type::String, |v| *v.clone()),
+        )?;
         let value_type = self.map_type(&mapped.type_)?;
         Ok(format!("HashMap<{}, {}>", key_type, value_type))
     }
@@ -360,7 +377,7 @@ impl TypeMapper {
     fn to_pascal_case(&self, s: &str) -> String {
         let mut result = String::new();
         let mut capitalize = true;
-        
+
         for ch in s.chars() {
             if ch == '_' || ch == '-' {
                 capitalize = true;
@@ -371,7 +388,7 @@ impl TypeMapper {
                 result.push(ch);
             }
         }
-        
+
         result
     }
 

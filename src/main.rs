@@ -45,20 +45,18 @@ fn main() -> Result<()> {
         tracing::Level::WARN
     };
 
-    tracing_subscriber::fmt()
-        .with_max_level(log_level)
-        .init();
+    tracing_subscriber::fmt().with_max_level(log_level).init();
 
     // Create compiler instance
     let mut compiler = Compiler::new()
         .with_optimization(cli.optimize)
         .with_runtime(cli.runtime);
 
-            // Test lexer (only in debug mode)
-            if cli.debug {
-                TypeScript_Rust_Compiler::test_lexer::test_lexer();
-            }
-    
+    // Test lexer (only in debug mode)
+    if cli.debug {
+        TypeScript_Rust_Compiler::test_lexer::test_lexer();
+    }
+
     // Compile TypeScript to Rust
     compiler.compile(&cli.input, &cli.output)?;
 

@@ -202,7 +202,7 @@ impl Lexer {
                 Some(token) => {
                     println!("Token: {:?}", token);
                     tokens.push(token);
-                },
+                }
                 None => break,
             }
         }
@@ -364,7 +364,7 @@ impl Lexer {
                 // parse_identifier_or_keyword manages position itself
             }
             '0'..='9' => {
-                // parse_number manages position itself  
+                // parse_number manages position itself
             }
             '"' | '\'' => {
                 // parse_string manages position itself

@@ -45,8 +45,7 @@ impl Compiler {
     /// Compile TypeScript code to Rust
     pub fn compile(&mut self, input: &Path, output: &Path) -> Result<()> {
         // Read input file
-        let input_content = fs::read_to_string(input)
-            .map_err(|e| CompilerError::Io(e))?;
+        let input_content = fs::read_to_string(input).map_err(CompilerError::Io)?;
 
         // Create lexer and tokenize
         let mut lexer = Lexer::new(input_content);
@@ -73,8 +72,7 @@ impl Compiler {
             self.write_multiple_files(output, rust_code)?;
         } else {
             // Write single file
-            fs::write(output, rust_code)
-                .map_err(|e| CompilerError::Io(e))?;
+            fs::write(output, rust_code).map_err(CompilerError::Io)?;
         }
 
         Ok(())
@@ -83,27 +81,22 @@ impl Compiler {
     /// Write multiple files for a project
     fn write_multiple_files(&self, output_dir: &Path, rust_code: &str) -> Result<()> {
         // Create output directory if it doesn't exist
-        fs::create_dir_all(output_dir)
-            .map_err(|e| CompilerError::Io(e))?;
+        fs::create_dir_all(output_dir).map_err(CompilerError::Io)?;
 
         // Write main.rs
         let main_rs_path = output_dir.join("src").join("main.rs");
-        fs::create_dir_all(main_rs_path.parent().unwrap())
-            .map_err(|e| CompilerError::Io(e))?;
-        fs::write(&main_rs_path, rust_code)
-            .map_err(|e| CompilerError::Io(e))?;
+        fs::create_dir_all(main_rs_path.parent().unwrap()).map_err(CompilerError::Io)?;
+        fs::write(&main_rs_path, rust_code).map_err(CompilerError::Io)?;
 
         // Write Cargo.toml
         let cargo_toml = self.generate_cargo_toml();
         let cargo_toml_path = output_dir.join("Cargo.toml");
-        fs::write(&cargo_toml_path, cargo_toml)
-            .map_err(|e| CompilerError::Io(e))?;
+        fs::write(&cargo_toml_path, cargo_toml).map_err(CompilerError::Io)?;
 
         // Write lib.rs if needed
         let lib_rs_path = output_dir.join("src").join("lib.rs");
         let lib_rs_content = self.generate_lib_rs();
-        fs::write(&lib_rs_path, lib_rs_content)
-            .map_err(|e| CompilerError::Io(e))?;
+        fs::write(&lib_rs_path, lib_rs_content).map_err(CompilerError::Io)?;
 
         Ok(())
     }
@@ -166,26 +159,24 @@ pub use runtime::{Any, Unknown, TypeScriptObject};
 
         if ts_files.is_empty() {
             return Err(CompilerError::internal_error(
-                "No TypeScript files found in input directory"
+                "No TypeScript files found in input directory",
             ));
         }
 
         // Create output directory
-        fs::create_dir_all(output_dir)
-            .map_err(|e| CompilerError::Io(e))?;
+        fs::create_dir_all(output_dir).map_err(CompilerError::Io)?;
 
         // Compile each file
         for ts_file in ts_files {
-        let relative_path = ts_file.strip_prefix(input_dir)
-            .map_err(|_| CompilerError::internal_error("Failed to strip prefix"))?;
-            
-            let rust_file = output_dir.join(relative_path)
-                .with_extension("rs");
-            
+            let relative_path = ts_file
+                .strip_prefix(input_dir)
+                .map_err(|_| CompilerError::internal_error("Failed to strip prefix"))?;
+
+            let rust_file = output_dir.join(relative_path).with_extension("rs");
+
             // Create directory for output file
             if let Some(parent) = rust_file.parent() {
-                fs::create_dir_all(parent)
-                    .map_err(|e| CompilerError::Io(e))?;
+                fs::create_dir_all(parent).map_err(CompilerError::Io)?;
             }
 
             // Compile single file
@@ -201,12 +192,11 @@ pub use runtime::{Any, Unknown, TypeScriptObject};
     /// Find all TypeScript files in directory
     fn find_typescript_files(&self, dir: &Path) -> Result<Vec<PathBuf>> {
         let mut ts_files = Vec::new();
-        
-        for entry in fs::read_dir(dir)
-            .map_err(|e| CompilerError::Io(e))? {
-            let entry = entry.map_err(|e| CompilerError::Io(e))?;
+
+        for entry in fs::read_dir(dir).map_err(CompilerError::Io)? {
+            let entry = entry.map_err(CompilerError::Io)?;
             let path = entry.path();
-            
+
             if path.is_dir() {
                 // Recursively search subdirectories
                 let sub_files = self.find_typescript_files(&path)?;
@@ -215,7 +205,7 @@ pub use runtime::{Any, Unknown, TypeScriptObject};
                 ts_files.push(path);
             }
         }
-        
+
         Ok(ts_files)
     }
 
@@ -224,20 +214,17 @@ pub use runtime::{Any, Unknown, TypeScriptObject};
         // Generate Cargo.toml
         let cargo_toml = self.generate_cargo_toml();
         let cargo_toml_path = output_dir.join("Cargo.toml");
-        fs::write(&cargo_toml_path, cargo_toml)
-            .map_err(|e| CompilerError::Io(e))?;
+        fs::write(&cargo_toml_path, cargo_toml).map_err(CompilerError::Io)?;
 
         // Generate README.md
         let readme = self.generate_readme();
         let readme_path = output_dir.join("README.md");
-        fs::write(&readme_path, readme)
-            .map_err(|e| CompilerError::Io(e))?;
+        fs::write(&readme_path, readme).map_err(CompilerError::Io)?;
 
         // Generate .gitignore
         let gitignore = self.generate_gitignore();
         let gitignore_path = output_dir.join(".gitignore");
-        fs::write(&gitignore_path, gitignore)
-            .map_err(|e| CompilerError::Io(e))?;
+        fs::write(&gitignore_path, gitignore).map_err(CompilerError::Io)?;
 
         Ok(())
     }
