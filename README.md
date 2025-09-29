@@ -43,7 +43,7 @@ This project aims to create a high-performance compiler that can translate TypeS
 ## 📦 Installation
 
 ```bash
-# Install from crates.io (when published)
+# Install from crates.io
 cargo install TypeScript-Rust-Compiler
 
 # Or build from source
