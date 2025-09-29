@@ -355,14 +355,6 @@ impl Lexer {
             ':' => Ok(Some(Token::Colon)),
             '?' => Ok(Some(Token::QuestionMark)),
             '@' => Ok(Some(Token::At)), // Add support for @ decorator symbol
-            '/' => {
-                // Check if this is the start of a regular expression
-                if self.peek_char() == Some('^') {
-                    Ok(self.parse_regex()?)
-                } else {
-                    Ok(Some(Token::Divide))
-                }
-            },
             '"' | '\'' => Ok(self.parse_string()?),
             '`' => Ok(self.parse_template_literal()?),
             '0'..='9' => Ok(self.parse_number()?),
@@ -701,6 +693,7 @@ impl Lexer {
     }
 
     /// Parse regular expression literal
+    #[allow(dead_code)]
     fn parse_regex(&mut self) -> Result<Option<Token>> {
         let mut pattern = String::new();
         let mut flags = String::new();

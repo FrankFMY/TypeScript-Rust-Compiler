@@ -49,66 +49,79 @@ impl CodeGenerator {
         // Process all statements
         for statement in &program.statements {
             match statement {
+                Statement::VariableDeclaration(var) => {
+                    let var_code = self.generate_variable_declaration(var)?;
+                    self.functions.push(var_code);
+                }
                 Statement::FunctionDeclaration(func) => {
-                    let func_code = self.generate_function(func)?;
+                    let func_code = self.generate_function_declaration(func)?;
                     self.functions.push(func_code);
                 }
                 Statement::ClassDeclaration(class) => {
-                    let (struct_code, impl_code) = self.generate_class(class)?;
+                    let (struct_code, impl_code) = self.generate_class_declaration(class)?;
                     self.structs.push(struct_code);
                     self.functions.push(impl_code);
                 }
                 Statement::InterfaceDeclaration(interface) => {
-                    let trait_code = self.generate_interface(interface)?;
+                    let trait_code = self.generate_interface_declaration(interface)?;
                     self.traits.push(trait_code);
                 }
                 Statement::TypeAlias(type_alias) => {
-                    let type_code = self.generate_type_alias(type_alias)?;
-                    self.structs.push(type_code.clone());
-
-                    // Check if this is an intersection type that needs additional struct generation
-                    if let Type::Intersection { left, right } = &type_alias.type_definition {
-                        if let Type::ObjectType(_) = &**left {
-                            if let Type::ObjectType(_) = &**right {
-                                // Generate combined struct for intersection
-                                let combined_struct = self.generate_intersection_struct(&type_alias.name, left, right)?;
-                                self.structs.push(combined_struct.clone());
-                                // Return the struct code instead of type alias
-                                return Ok(combined_struct);
-                            }
-                        }
-                    }
+                    let type_code = self.generate_type_alias_declaration(type_alias)?;
+                    self.structs.push(type_code);
                 }
                 Statement::EnumDeclaration(enum_decl) => {
-                    let enum_code = self.generate_enum(enum_decl)?;
+                    let enum_code = self.generate_enum_declaration(enum_decl)?;
                     self.enums.push(enum_code);
                 }
-                Statement::VariableDeclaration(var) => {
-                    let var_code = self.generate_variable(var)?;
-                    self.functions.push(var_code);
-                }
                 Statement::ImportDeclaration(import) => {
-                    let import_code = self.generate_import(import)?;
+                    let import_code = self.generate_import_declaration(import)?;
                     self.imports.push(import_code);
                 }
                 Statement::ExportDeclaration(export) => {
-                    let export_code = self.generate_export(export)?;
-                    self.functions.push(export_code);
+                    // Exports are handled by making items public
+                    match &*export.declaration {
+                        Statement::ClassDeclaration(class) => {
+                            let (struct_code, impl_code) = self.generate_class_declaration(class)?;
+                            self.structs.push(struct_code);
+                            self.functions.push(impl_code);
+                        }
+                        Statement::InterfaceDeclaration(interface) => {
+                            let trait_code = self.generate_interface_declaration(interface)?;
+                            self.traits.push(trait_code);
+                        }
+                        Statement::FunctionDeclaration(func) => {
+                            let func_code = self.generate_function_declaration(func)?;
+                            self.functions.push(func_code);
+                        }
+                        Statement::TypeAlias(type_alias) => {
+                            let type_code = self.generate_type_alias_declaration(type_alias)?;
+                            self.structs.push(type_code);
+                        }
+                        Statement::EnumDeclaration(enum_decl) => {
+                            let enum_code = self.generate_enum_declaration(enum_decl)?;
+                            self.enums.push(enum_code);
+                        }
+                        _ => {
+                            // Handle other export types
+                        }
+                    }
                 }
                 Statement::NamespaceDeclaration(namespace) => {
-                    let module_code = self.generate_namespace(namespace)?;
+                    let module_code = self.generate_namespace_declaration(namespace)?;
                     self.modules.push(module_code);
                 }
                 Statement::ModuleDeclaration(module) => {
-                    let module_code = self.generate_module(module)?;
+                    let module_code = self.generate_module_declaration(module)?;
                     self.modules.push(module_code);
                 }
                 Statement::ExpressionStatement(expr_stmt) => {
-                    let expr_code = self.generate_expression(&expr_stmt.expression)?;
+                    let expr_code = self.generate_expression_statement(expr_stmt)?;
                     self.functions.push(expr_code);
                 }
                 _ => {
-                    // Handle other statement types
+                    // Handle other statement types - log what we found
+                    println!("DEBUG: Unhandled statement type: {:?}", statement);
                 }
             }
         }
@@ -123,12 +136,12 @@ impl CodeGenerator {
         rust_code.push_str(&self.functions.join("\n\n"));
         rust_code.push('\n');
         rust_code.push_str(&self.modules.join("\n\n"));
-        
+
         // Add serde import if we have structs
         if !self.structs.is_empty() {
             rust_code.insert_str(0, "use serde::{Deserialize, Serialize};\n");
         }
-        
+
         // Add main function if we have classes or functions
         if !self.structs.is_empty() || !self.functions.is_empty() {
             rust_code.push_str("\n\nfn main() {\n");
@@ -141,6 +154,7 @@ impl CodeGenerator {
     }
 
     /// Generate imports
+    #[allow(dead_code)]
     fn generate_imports(&self) -> String {
         let mut imports = vec![
             "use std::collections::HashMap;".to_string(),
@@ -222,8 +236,8 @@ impl TypeScriptObject for HashMap<String, Any> {
         .to_string()
     }
 
-    /// Generate function
-    fn generate_function(&mut self, func: &FunctionDeclaration) -> Result<String> {
+    /// Generate function declaration
+    fn generate_function_declaration(&mut self, func: &FunctionDeclaration) -> Result<String> {
         let name = &func.name;
         let params = self.generate_parameters(&func.parameters)?;
         let return_type = if let Some(ref t) = func.return_type {
@@ -234,17 +248,26 @@ impl TypeScriptObject for HashMap<String, Any> {
 
         let body = self.generate_statement(&func.body)?;
 
+        // Handle generic parameters
+        let generic_params = if func.type_parameters.is_empty() {
+            String::new()
+        } else {
+            let params: Vec<String> = func.type_parameters.iter().map(|p| p.name.clone()).collect();
+            format!("<{}>", params.join(", "))
+        };
+
         Ok(format!(
-            "pub fn {}({}){}{{\n    {}\n}}",
-            name, params, return_type, body
+            "pub fn {}{}({}){}{{\n    {}\n}}",
+            name, generic_params, params, return_type, body
         ))
     }
 
-    /// Generate class
-    fn generate_class(&mut self, class: &ClassDeclaration) -> Result<(String, String)> {
+    /// Generate class declaration
+    fn generate_class_declaration(&mut self, class: &ClassDeclaration) -> Result<(String, String)> {
         let name = &class.name;
         let mut fields = Vec::new();
         let mut methods = Vec::new();
+        let mut has_constructor = false;
 
         // Process class body
         for member in &class.body.members {
@@ -262,22 +285,31 @@ impl TypeScriptObject for HashMap<String, Any> {
                     } else {
                         format!("    pub {}: {}", field_name, field_type)
                     };
-                    fields.push(field_def);
+
+                    // Add initialization if there's an initializer
+                    let mut field_with_init = field_def;
+                    if let Some(ref initializer) = prop.initializer {
+                        let init_value = self.generate_expression(initializer)?;
+                        field_with_init = format!("    pub {}: {} = {}", field_name, field_type, init_value);
+                    }
+
+                    fields.push(field_with_init);
                 }
                 ClassMember::Method(method) => {
-                    let method_code = self.generate_method(method)?;
+                    let method_code = self.generate_method_declaration(method)?;
                     methods.push(method_code);
                 }
                 ClassMember::Constructor(constructor) => {
-                    let constructor_code = self.generate_constructor(constructor, &class.body.members)?;
+                    has_constructor = true;
+                    let constructor_code = self.generate_constructor_declaration(constructor)?;
                     methods.push(constructor_code);
                 }
                 ClassMember::Getter(getter) => {
-                    let getter_code = self.generate_getter(getter)?;
+                    let getter_code = self.generate_getter_declaration(getter)?;
                     methods.push(getter_code);
                 }
                 ClassMember::Setter(setter) => {
-                    let setter_code = self.generate_setter(setter)?;
+                    let setter_code = self.generate_setter_declaration(setter)?;
                     methods.push(setter_code);
                 }
                 ClassMember::Decorator(decorator) => {
@@ -288,6 +320,21 @@ impl TypeScriptObject for HashMap<String, Any> {
                     // Handle other member types
                 }
             }
+        }
+
+        // Add default constructor if none exists
+        if !has_constructor {
+            let default_constructor = format!(
+                "    pub fn new() -> Self {{\n        Self {{\n{}\n        }}\n    }}",
+                fields.iter().map(|f| {
+                    if f.contains("= ") {
+                        f.split(" = ").next().unwrap().trim().to_string()
+                    } else {
+                        format!("{}: Default::default()", f.split(": ").next().unwrap().trim())
+                    }
+                }).collect::<Vec<_>>().join(",\n            ")
+            );
+            methods.push(default_constructor);
         }
 
         // Handle generic parameters for class
@@ -304,13 +351,13 @@ impl TypeScriptObject for HashMap<String, Any> {
             fields.join(",\n")
         );
 
-        let impl_code = format!("impl {}{} {{\n{}\n}}", generic_params, name, methods.join("\n"));
+        let impl_code = format!("impl {}{} {{\n{}\n}}", generic_params, name, methods.join("\n\n"));
 
         Ok((struct_code, impl_code))
     }
 
-    /// Generate interface as trait
-    fn generate_interface(&mut self, interface: &InterfaceDeclaration) -> Result<String> {
+    /// Generate interface declaration as trait
+    fn generate_interface_declaration(&mut self, interface: &InterfaceDeclaration) -> Result<String> {
         let name = &interface.name;
         let mut methods = Vec::new();
 
@@ -331,18 +378,57 @@ impl TypeScriptObject for HashMap<String, Any> {
                         "Box<dyn Any>".to_string()
                     };
 
-                    let getter = format!("    fn get_{}(&self) -> {};", prop.name, prop_type);
-                    let setter =
-                        format!("    fn set_{}(&mut self, value: {});", prop.name, prop_type);
-                    methods.push(getter);
-                    methods.push(setter);
+                    // Add getter and setter methods
+                    methods.push(format!("    fn get_{}(&self) -> {};", prop.name, prop_type));
+                    if !prop.readonly {
+                        methods.push(format!("    fn set_{}(&mut self, value: {});", prop.name, prop_type));
+                    }
                 }
                 ObjectTypeMember::Method(method) => {
-                    let method_sig = self.generate_method_signature(method)?;
-                    methods.push(format!("    {};", method_sig));
+                    let params = self.generate_parameters(&method.parameters)?;
+                    let return_type = if let Some(ref t) = method.return_type {
+                        format!(" -> {}", self.type_mapper.map_type(t)?)
+                    } else {
+                        " -> ()".to_string()
+                    };
+
+                    let method_sig = format!("    fn {}(&self, {}){};", method.name, params, return_type);
+                    methods.push(method_sig);
                 }
-                _ => {
-                    // Handle other member types
+                ObjectTypeMember::Call(call) => {
+                    let params = self.generate_parameters(&call.parameters)?;
+                    let return_type = if let Some(ref t) = call.return_type {
+                        format!(" -> {}", self.type_mapper.map_type(t)?)
+                    } else {
+                        " -> ()".to_string()
+                    };
+
+                    methods.push(format!("    fn call(&self, {}){};", params, return_type));
+                }
+                ObjectTypeMember::Index(index) => {
+                    let key_type = self.type_mapper.map_type(
+                        &index
+                            .parameter
+                            .type_
+                            .as_ref()
+                            .map_or(Type::String, |v| *v.clone()),
+                    )?;
+                    let value_type = self.type_mapper.map_type(&index.type_)?;
+
+                    methods.push(format!("    fn index_get(&self, key: {}) -> {};", key_type, value_type));
+                    if !index.readonly {
+                        methods.push(format!("    fn index_set(&mut self, key: {}, value: {});", key_type, value_type));
+                    }
+                }
+                ObjectTypeMember::Construct(construct) => {
+                    let params = self.generate_parameters(&construct.parameters)?;
+                    let return_type = if let Some(ref t) = construct.return_type {
+                        format!(" -> {}", self.type_mapper.map_type(t)?)
+                    } else {
+                        " -> ()".to_string()
+                    };
+
+                    methods.push(format!("    fn construct({}){};", params, return_type));
                 }
             }
         }
@@ -350,14 +436,15 @@ impl TypeScriptObject for HashMap<String, Any> {
         Ok(format!("pub trait {}{} {{\n{}\n}}", name, generic_params, methods.join("\n")))
     }
 
-    /// Generate type alias
-    fn generate_type_alias(&mut self, type_alias: &TypeAlias) -> Result<String> {
+    /// Generate type alias declaration
+    fn generate_type_alias_declaration(&mut self, type_alias: &TypeAlias) -> Result<String> {
         let name = &type_alias.name;
         let type_def = self.type_mapper.map_type(&type_alias.type_definition)?;
         Ok(format!("pub type {} = {};", name, type_def))
     }
 
     /// Generate intersection struct for object types
+    #[allow(dead_code)]
     fn generate_intersection_struct(&mut self, name: &str, left: &Type, right: &Type) -> Result<String> {
         let mut fields = Vec::new();
         
@@ -396,8 +483,8 @@ impl TypeScriptObject for HashMap<String, Any> {
         ))
     }
 
-    /// Generate constructor
-    fn generate_constructor(&mut self, constructor: &ConstructorDeclaration, class_members: &[ClassMember]) -> Result<String> {
+    /// Generate constructor declaration
+    fn generate_constructor_declaration(&mut self, constructor: &ConstructorDeclaration) -> Result<String> {
         let mut params = Vec::new();
         for param in &constructor.parameters {
             let param_type = if let Some(ref t) = param.type_ {
@@ -440,26 +527,8 @@ impl TypeScriptObject for HashMap<String, Any> {
         
         // If no assignments found, use property initializers
         if field_assignments.is_empty() {
-            for member in class_members {
-                if let ClassMember::Property(prop) = member {
-                    if let Some(ref initializer) = prop.initializer {
-                        let init_value = self.generate_expression(initializer)?;
-                        field_assignments.push(format!("            {}: {}", prop.name, init_value));
-                    } else {
-                        // Use default value based on type
-                        let default_value = match prop.type_.as_ref() {
-                            Some(t) => match t {
-                                Type::String => "\"\".to_string()".to_string(),
-                                Type::Number => "0.0".to_string(),
-                                Type::Boolean => "false".to_string(),
-                                _ => "Default::default()".to_string(),
-                            },
-                            None => "Default::default()".to_string(),
-                        };
-                        field_assignments.push(format!("            {}: {}", prop.name, default_value));
-                    }
-                }
-            }
+            // This will be handled by the default constructor generation
+            field_assignments.push("            // No explicit initializers found".to_string());
         }
         
         let initialization = if field_assignments.is_empty() {
@@ -477,8 +546,8 @@ impl TypeScriptObject for HashMap<String, Any> {
         Ok(format!("{}{}    pub fn new({}) -> Self {{\n{}\n    }}", decorators_str, "    ", params.join(", "), initialization))
     }
 
-    /// Generate getter
-    fn generate_getter(&mut self, getter: &GetterDeclaration) -> Result<String> {
+    /// Generate getter declaration
+    fn generate_getter_declaration(&mut self, getter: &GetterDeclaration) -> Result<String> {
         let name = &getter.name;
         let return_type = if let Some(ref t) = getter.type_ {
             self.type_mapper.map_type(t)?
@@ -501,8 +570,8 @@ impl TypeScriptObject for HashMap<String, Any> {
         Ok(format!("{}{}    pub fn {}(&self) -> {} {{\n{}\n    }}", decorators_str, "    ", name, return_type, body))
     }
 
-    /// Generate setter
-    fn generate_setter(&mut self, setter: &SetterDeclaration) -> Result<String> {
+    /// Generate setter declaration
+    fn generate_setter_declaration(&mut self, setter: &SetterDeclaration) -> Result<String> {
         let name = &setter.name;
         let param_type = if let Some(ref t) = setter.parameter.type_ {
             self.type_mapper.map_type(t)?
@@ -526,6 +595,7 @@ impl TypeScriptObject for HashMap<String, Any> {
     }
 
     /// Generate block statement
+    #[allow(dead_code)]
     fn generate_block_statement(&mut self, block: &BlockStatement) -> Result<String> {
         let mut statements = Vec::new();
         for stmt in &block.statements {
@@ -536,8 +606,8 @@ impl TypeScriptObject for HashMap<String, Any> {
     }
 
 
-    /// Generate enum
-    fn generate_enum(&mut self, enum_decl: &EnumDeclaration) -> Result<String> {
+    /// Generate enum declaration
+    fn generate_enum_declaration(&mut self, enum_decl: &EnumDeclaration) -> Result<String> {
         let name = &enum_decl.name;
         let mut variants = Vec::new();
         let mut has_string_values = false;
@@ -547,7 +617,6 @@ impl TypeScriptObject for HashMap<String, Any> {
             if let Some(ref init) = member.initializer {
                 if matches!(init, Expression::Literal(Literal::String(_))) {
                     has_string_values = true;
-                    break;
                 }
             }
         }
@@ -565,6 +634,13 @@ impl TypeScriptObject for HashMap<String, Any> {
                             const_definitions.push(format!(
                                 "pub const {}: &str = \"{}\";",
                                 variant_name, s
+                            ));
+                            enum_variants.push(format!("    {}", variant_name));
+                        }
+                        Expression::Literal(Literal::Number(n)) => {
+                            const_definitions.push(format!(
+                                "pub const {}: f64 = {};",
+                                variant_name, n
                             ));
                             enum_variants.push(format!("    {}", variant_name));
                         }
@@ -605,8 +681,8 @@ impl TypeScriptObject for HashMap<String, Any> {
         }
     }
 
-    /// Generate variable
-    fn generate_variable(&mut self, var: &VariableDeclaration) -> Result<String> {
+    /// Generate variable declaration
+    fn generate_variable_declaration(&mut self, var: &VariableDeclaration) -> Result<String> {
         let name = &var.name;
         let var_type = if let Some(ref t) = var.type_annotation {
             self.type_mapper.map_type(t)?
@@ -617,6 +693,8 @@ impl TypeScriptObject for HashMap<String, Any> {
                     Expression::Literal(Literal::String(_)) => "String".to_string(),
                     Expression::Literal(Literal::Number(_)) => "f64".to_string(),
                     Expression::Literal(Literal::Boolean(_)) => "bool".to_string(),
+                    Expression::Array(_) => "Vec<Box<dyn Any>>".to_string(),
+                    Expression::Object(_) => "HashMap<String, Box<dyn Any>>".to_string(),
                     Expression::New(new_expr) => {
                         // Try to get the type from the constructor
                         if let Expression::Identifier(callee) = &*new_expr.callee {
@@ -631,10 +709,10 @@ impl TypeScriptObject for HashMap<String, Any> {
                             match callee.as_str() {
                                 "greet" => "String".to_string(),
                                 "add" => "f64".to_string(),
-                                _ => "f64".to_string(), // Default to f64 for unknown functions
+                                _ => "Box<dyn Any>".to_string(),
                             }
                         } else {
-                            "f64".to_string()
+                            "Box<dyn Any>".to_string()
                         }
                     },
                     _ => "Box<dyn Any>".to_string(),
@@ -653,53 +731,63 @@ impl TypeScriptObject for HashMap<String, Any> {
         Ok(format!("let {}: {}{};", name, var_type, initializer))
     }
 
-    /// Generate import
-    fn generate_import(&mut self, import: &ImportDeclaration) -> Result<String> {
+    /// Generate import declaration
+    fn generate_import_declaration(&mut self, import: &ImportDeclaration) -> Result<String> {
         let source = &import.source;
-        let mut import_code = format!("use {}::", source);
+        let mut import_parts = Vec::new();
 
         for specifier in &import.specifiers {
             match specifier {
                 ImportSpecifier::Named(named) => {
-                    import_code.push_str(&format!("{} as {}", named.imported, named.name));
+                    if named.name == named.imported {
+                        import_parts.push(named.name.clone());
+                    } else {
+                        import_parts.push(format!("{} as {}", named.imported, named.name));
+                    }
                 }
                 ImportSpecifier::Default(default) => {
-                    import_code.push_str(&default.name);
+                    import_parts.push(default.name.clone());
                 }
                 ImportSpecifier::Namespace(namespace) => {
-                    import_code.push_str(&format!("* as {}", namespace.name));
+                    import_parts.push(format!("* as {}", namespace.name));
                 }
             }
         }
 
-        Ok(import_code)
+        if import_parts.is_empty() {
+            // Default import without named imports
+            Ok(format!("use {};", source))
+        } else {
+            Ok(format!("use {}::{{{}}};", source, import_parts.join(", ")))
+        }
     }
 
     /// Generate export
+    #[allow(dead_code)]
     fn generate_export(&mut self, _export: &ExportDeclaration) -> Result<String> {
         // In Rust, everything is public by default in the module
         // Exports are handled by the module system
         Ok(String::new())
     }
 
-    /// Generate namespace as module
-    fn generate_namespace(&mut self, namespace: &NamespaceDeclaration) -> Result<String> {
+    /// Generate namespace declaration as module
+    fn generate_namespace_declaration(&mut self, namespace: &NamespaceDeclaration) -> Result<String> {
         let name = &namespace.name;
         let body = self.generate_statement(&namespace.body)?;
         Ok(format!("pub mod {} {{\n{}\n}}", name, body))
     }
 
-    /// Generate module
-    fn generate_module(&mut self, module: &ModuleDeclaration) -> Result<String> {
+    /// Generate module declaration
+    fn generate_module_declaration(&mut self, module: &ModuleDeclaration) -> Result<String> {
         let name = &module.name;
         let body = self.generate_statement(&module.body)?;
         Ok(format!("pub mod {} {{\n{}\n}}", name, body))
     }
 
-    /// Generate method
-    fn generate_method(&mut self, method: &MethodDeclaration) -> Result<String> {
+    /// Generate method declaration
+    fn generate_method_declaration(&mut self, method: &MethodDeclaration) -> Result<String> {
         let name = &method.name;
-        let params = self.generate_parameters(&method.parameters)?;
+        let _params = self.generate_parameters(&method.parameters)?;
         let return_type = if let Some(ref t) = method.return_type {
             let rust_type = self.type_mapper.map_type(t)?;
             // For owned types like String, return cloned values
@@ -739,6 +827,7 @@ impl TypeScriptObject for HashMap<String, Any> {
     }
 
     /// Generate method signature
+    #[allow(dead_code)]
     fn generate_method_signature(&mut self, method: &MethodSignature) -> Result<String> {
         let name = &method.name;
         let params = self.generate_parameters(&method.parameters)?;
@@ -774,6 +863,12 @@ impl TypeScriptObject for HashMap<String, Any> {
         let result = param_strings.join(", ");
         println!("DEBUG: generate_parameters result: '{}'", result);
         Ok(result)
+    }
+
+    /// Generate expression statement
+    fn generate_expression_statement(&mut self, expr_stmt: &ExpressionStatement) -> Result<String> {
+        let expr = self.generate_expression(&expr_stmt.expression)?;
+        Ok(format!("{};", expr))
     }
 
     /// Generate statement
@@ -815,7 +910,10 @@ impl TypeScriptObject for HashMap<String, Any> {
                     Ok("return;".to_string())
                 }
             }
-            Statement::VariableDeclaration(var) => self.generate_variable(var),
+            Statement::VariableDeclaration(var) => {
+                let var_code = self.generate_variable_declaration(var)?;
+                Ok(var_code)
+            },
             _ => {
                 // Handle other statement types
                 Ok("// TODO: Implement statement".to_string())
@@ -937,7 +1035,16 @@ impl TypeScriptObject for HashMap<String, Any> {
         let mut elements = Vec::new();
         for element in &array.elements {
             if let Some(expr) = element {
-                elements.push(self.generate_expression(expr)?);
+                let element_code = self.generate_expression(expr)?;
+                // Wrap complex expressions in Box::new
+                match expr {
+                    Expression::Literal(_) | Expression::Identifier(_) => {
+                        elements.push(element_code);
+                    }
+                    _ => {
+                        elements.push(format!("Box::new({}) as Box<dyn Any>", element_code));
+                    }
+                }
             } else {
                 elements.push("None".to_string());
             }
@@ -951,7 +1058,14 @@ impl TypeScriptObject for HashMap<String, Any> {
         for property in &object.properties {
             let key = self.generate_expression(&property.key)?;
             let value = self.generate_expression(&property.value)?;
-            fields.push(format!("{}: {}", key, value));
+
+            // Wrap values in Box::new for dynamic typing
+            let wrapped_value = match &property.value {
+                Expression::Literal(_) | Expression::Identifier(_) => value,
+                _ => format!("Box::new({}) as Box<dyn Any>", value),
+            };
+
+            fields.push(format!("\"{}\".to_string(): {}", key, wrapped_value));
         }
         Ok(format!("{{\n        {}\n    }}", fields.join(",\n        ")))
     }

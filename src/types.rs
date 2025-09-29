@@ -199,7 +199,48 @@ impl TypeMapper {
         if type_args.is_empty() {
             Ok(base_type)
         } else {
-            Ok(format!("{}<{}>", base_type, type_args.join(", ")))
+            // Handle special generic types
+            match base_type.as_str() {
+                "Array" => {
+                    if type_args.len() == 1 {
+                        Ok(format!("Vec<{}>", type_args[0]))
+                    } else {
+                        Ok(format!("Vec<{}>", type_args.join(", ")))
+                    }
+                }
+                "Promise" => {
+                    if type_args.len() == 1 {
+                        Ok(format!("std::pin::Pin<Box<dyn std::future::Future<Output = {}>>>", type_args[0]))
+                    } else {
+                        Ok("Box<dyn std::future::Future<Output = ()>>".to_string())
+                    }
+                }
+                "Map" | "Record" => {
+                    if type_args.len() == 2 {
+                        Ok(format!("std::collections::HashMap<{}, {}>", type_args[0], type_args[1]))
+                    } else {
+                        Ok("std::collections::HashMap<Box<dyn Any>, Box<dyn Any>>".to_string())
+                    }
+                }
+                "Set" => {
+                    if type_args.len() == 1 {
+                        Ok(format!("std::collections::HashSet<{}>", type_args[0]))
+                    } else {
+                        Ok("std::collections::HashSet<Box<dyn Any>>".to_string())
+                    }
+                }
+                "Partial" | "Required" | "Readonly" | "Pick" | "Omit" => {
+                    // These are complex type transformations that require runtime support
+                    if self.runtime {
+                        Ok("Box<dyn Any>".to_string())
+                    } else {
+                        Ok(base_type)
+                    }
+                }
+                _ => {
+                    Ok(format!("{}<{}>", base_type, type_args.join(", ")))
+                }
+            }
         }
     }
 

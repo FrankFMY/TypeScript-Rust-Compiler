@@ -1,0 +1,4 @@
+# Generated output files
+*.rs
+*.rs.bak
+*.log

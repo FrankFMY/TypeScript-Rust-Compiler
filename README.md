@@ -1,19 +1,44 @@
-# TypeScript-Rust-Compiler - TypeScript to Rust Compiler
+# TypeScript-Rust-Compiler
+
+A TypeScript to Rust compiler that transforms TypeScript code into idiomatic, efficient Rust code with growing TypeScript feature support.
 
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/FrankFMY/TypeScript-Rust-Compiler)
 
-A high-performance compiler that transforms TypeScript code into idiomatic Rust, supporting all TypeScript features including advanced types, generics, decorators, and async/await patterns.
+## 🎯 Overview
 
-## 🚀 Features
+This project aims to create a high-performance compiler that can translate TypeScript code into safe, efficient Rust code while preserving TypeScript's type system and semantics.
 
--   **Complete TypeScript Support**: All TypeScript features including advanced types, generics, decorators, and modules
--   **High Performance**: Lightning-fast compilation with optimization support
--   **Type Safety**: Full type safety preservation from TypeScript to Rust
--   **Runtime Support**: Optional runtime for TypeScript semantics
--   **Project Support**: Compile entire TypeScript projects to Rust projects
--   **Modern Rust**: Generates idiomatic Rust code with latest features
+## 🚀 Current Features
+
+### ✅ **Fully Working**
+
+-   **Variables**: `let`, `const`, `var` with type annotations
+-   **Primitive Types**: `string`, `number`, `boolean`, `null`, `undefined`
+-   **Arrays**: `number[]`, `Array<string>`, readonly arrays
+-   **Objects**: Object literals with type annotations
+-   **Functions**: Function declarations with parameters and return types
+-   **Classes**: Basic class declarations with properties and methods
+-   **Interfaces**: Interface definitions (generate Rust traits)
+-   **Enums**: Basic enums and string enums with const generation
+-   **Type Aliases**: Simple type alias declarations
+
+### ⚠️ **Partially Working**
+
+-   **Complex Types**: Union and intersection types (basic support)
+-   **Generic Types**: Basic generic type handling
+-   **Export Statements**: `export` declarations are parsed
+-   **Advanced Expressions**: Template literals, optional chaining
+
+### ❌ **Not Yet Implemented**
+
+-   **Import/Export Resolution**: Import statements are parsed but not fully resolved
+-   **Class Inheritance**: `extends` and `implements` clauses need more work
+-   **Advanced Type System**: Mapped types, conditional types, template literal types
+-   **Module System**: Full module resolution and linking
+-   **Decorators**: Decorator syntax and processing
+-   **Namespaces**: Namespace declarations and scoping
 
 ## 📦 Installation
 
@@ -33,16 +58,19 @@ cargo build --release
 
 ```bash
 # Compile a single TypeScript file
-typescript-rust-compiler input.ts -o output.rs
+cargo run -- --input input.ts --output output.rs
 
 # Compile with optimization
-typescript-rust-compiler input.ts -o output.rs --optimize
+cargo run -- --input input.ts --output output.rs --optimize
 
 # Compile with runtime support
-typescript-rust-compiler input.ts -o output.rs --runtime
+cargo run -- --input input.ts --output output.rs --runtime
 
 # Compile an entire project
-typescript-rust-compiler src/ -o rust-project/
+cargo run -- --input src/ --output rust-project/
+
+# Enable debug mode for detailed output
+cargo run -- --input input.ts --output output.rs --debug
 ```
 
 ### Example
@@ -53,78 +81,55 @@ typescript-rust-compiler src/ -o rust-project/
 interface User {
 	name: string;
 	age: number;
-	email?: string;
 }
 
-class UserService {
-	private users: User[] = [];
+class Person {
+	name: string;
+	age: number;
 
-	addUser(user: User): void {
-		this.users.push(user);
+	constructor(name: string, age: number) {
+		this.name = name;
+		this.age = age;
 	}
 
-	findUser(name: string): User | undefined {
-		return this.users.find((u) => u.name === name);
-	}
-
-	getAllUsers(): User[] {
-		return [...this.users];
+	greet(): string {
+		return `Hello, I'm ${this.name}`;
 	}
 }
 
-async function fetchUser(id: string): Promise<User> {
-	// API call simulation
-	return {
-		name: 'John Doe',
-		age: 30,
-		email: 'john@example.com',
-	};
+function add(a: number, b: number): number {
+	return a + b;
 }
+
+const result = add(5, 3);
 ```
 
 **Generated Rust Output:**
 
 ```rust
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct User {
+pub struct Person {
     pub name: String,
-    pub age: i32,
-    pub email: Option<String>,
+    pub age: f64,
 }
 
-pub struct UserService {
-    users: Vec<User>,
-}
-
-impl UserService {
-    pub fn new() -> Self {
-        Self { users: Vec::new() }
+impl Person {
+    pub fn new(name: String, age: f64) -> Self {
+        Self { name, age }
     }
 
-    pub fn add_user(&mut self, user: User) {
-        self.users.push(user);
-    }
-
-    pub fn find_user(&self, name: &str) -> Option<&User> {
-        self.users.iter().find(|u| u.name == name)
-    }
-
-    pub fn get_all_users(&self) -> Vec<User> {
-        self.users.clone()
+    pub fn greet(&self) -> String {
+        format!("Hello, I'm {}", self.name)
     }
 }
 
-pub async fn fetch_user(id: &str) -> Result<User, Box<dyn std::error::Error>> {
-    // API call simulation
-    Ok(User {
-        name: "John Doe".to_string(),
-        age: 30,
-        email: Some("john@example.com".to_string()),
-    })
+pub fn add(a: f64, b: f64) -> f64 {
+    (a + b)
 }
+
+let result: f64 = add(5.0, 3.0);
 ```
 
 ## 🔧 Advanced Features
@@ -210,18 +215,21 @@ OPTIONS:
 
 ```
 typescript-rust-compiler/
-├── src/
-│   ├── lexer/          # Lexical analysis
-│   ├── parser/         # Syntax analysis
-│   ├── ast/            # AST structures
-│   ├── semantic/       # Semantic analysis
-│   ├── types/          # Type system
-│   ├── generator/      # Code generation
-│   ├── runtime/        # Runtime support
-│   └── cli/           # CLI interface
-├── tests/              # Test suite
-├── examples/          # Example projects
-└── docs/              # Documentation
+├── src/                    # Source code
+│   ├── lexer.rs           # Lexical analysis
+│   ├── parser.rs          # Syntax analysis
+│   ├── ast.rs             # AST structures
+│   ├── types.rs           # Type system
+│   ├── generator.rs       # Code generation
+│   ├── compiler.rs        # Main compiler logic
+│   └── main.rs            # CLI entry point
+├── examples/               # Example files organized by complexity
+│   ├── basic/             # ✅ Fully working examples
+│   ├── advanced/          # ⚠️ Partially working examples
+│   ├── integration/       # 🔍 Comprehensive tests
+│   └── examples_outputs/  # Generated Rust files
+├── tests/                 # Unit and integration tests
+└── docs/                  # Documentation (planned)
 ```
 
 ## 🧪 Testing
@@ -263,11 +271,17 @@ cargo test
 ### Running Examples
 
 ```bash
-# Compile basic example
-cargo run -- examples/basic_example.ts -o examples/basic_example.rs
+# Test basic functionality
+cargo run -- --input examples/basic/simple_test.ts --output examples_outputs/simple_test_output.rs
 
-# Compile advanced example
-cargo run -- examples/advanced_example.ts -o examples/advanced_example.rs --runtime
+# Test interface generation
+cargo run -- --input examples/advanced/separate_interface_test.ts --output examples_outputs/interface_output.rs
+
+# Test comprehensive features
+cargo run -- --input examples/integration/comprehensive_test.ts --output examples_outputs/comprehensive_output.rs
+
+# Run all examples
+bash examples/test_all.sh
 ```
 
 ## 📚 Documentation
@@ -294,12 +308,33 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🔮 Roadmap
 
--   [ ] Full TypeScript 5.x support
--   [ ] WebAssembly target
--   [ ] IDE integration
--   [ ] Performance optimizations
--   [ ] More runtime features
--   [ ] Plugin system
+### 🚧 **Phase 1: Core Features (Current)**
+
+-   [x] Basic TypeScript parsing and AST generation
+-   [x] Variable declarations and type annotations
+-   [x] Function declarations and calls
+-   [x] Class declarations (basic)
+-   [x] Interface declarations (trait generation)
+-   [x] Enum declarations with const generation
+-   [x] Basic type mapping (primitives, arrays, objects)
+
+### 🎯 **Phase 2: Advanced Features (Next)**
+
+-   [ ] Import/export resolution and module linking
+-   [ ] Class inheritance (`extends` and `implements`)
+-   [ ] Generic type parameters and constraints
+-   [ ] Advanced type system (union, intersection, mapped types)
+-   [ ] Template literal types and conditional types
+-   [ ] Decorator support
+
+### 🚀 **Phase 3: Production Ready**
+
+-   [ ] Full TypeScript 5.x language support
+-   [ ] WebAssembly compilation target
+-   [ ] IDE integration (LSP, syntax highlighting)
+-   [ ] Performance optimizations and benchmarking
+-   [ ] Comprehensive runtime support
+-   [ ] Plugin system for extensibility
 
 ---
 

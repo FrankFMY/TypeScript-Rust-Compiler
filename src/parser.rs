@@ -92,6 +92,7 @@ impl Parser {
         }
 
         let token = &self.tokens[self.position];
+
         let statement = match token {
             Token::EOF => return Ok(None),
             Token::Keyword(keyword) => match keyword {
@@ -1968,55 +1969,6 @@ impl Parser {
                     Err(CompilerError::parse_error(
                         1, 1,
                         "Expected colon after property name".to_string(),
-                    ))
-                }
-            }
-            Token::Identifier(name) => {
-                self.advance();
-                
-                // Check for optional marker
-                let optional = if self.current_token() == &Token::QuestionMark {
-                    self.advance();
-                    true
-                } else {
-                    false
-                };
-
-                if self.current_token() == &Token::LeftParen {
-                    // It's a method signature
-                    let parameters = self.parse_parameters()?;
-                    let return_type = if self.current_token() == &Token::Colon {
-                        self.advance();
-                        Some(self.parse_type()?)
-                    } else {
-                        None
-                    };
-                    self.expect_token(&Token::Semicolon)?;
-
-                    Ok(ObjectTypeMember::Method(MethodSignature {
-                        name,
-                        optional,
-                        type_parameters: Vec::new(),
-                        parameters,
-                        return_type,
-                    }))
-                } else if self.current_token() == &Token::Colon {
-                    // It's a property signature
-                    self.advance();
-                    let type_annotation = self.parse_type()?;
-                    self.expect_token(&Token::Semicolon)?;
-
-                    Ok(ObjectTypeMember::Property(PropertySignature {
-                        name,
-                        optional,
-                        type_: Some(type_annotation),
-                        readonly,
-                    }))
-                } else {
-                    Err(CompilerError::parse_error(
-                        1,
-                        1,
-                        "Expected method or property signature".to_string(),
                     ))
                 }
             }
