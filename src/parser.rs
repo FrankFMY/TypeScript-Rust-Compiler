@@ -1020,11 +1020,13 @@ impl Parser {
 
                     self.expect_token(&Token::GreaterThan)?; // consume >
 
+                    self.advance(); // consume the identifier token
                     Type::GenericNamed {
                         name: name.to_string(),
                         type_arguments: type_args,
                     }
                 } else {
+                    self.advance(); // consume the identifier token
                     Type::Named(name.to_string())
                 };
 
@@ -1262,8 +1264,9 @@ impl Parser {
             self.advance();
             let mut type_parameters = Vec::new();
 
-            while self.current_token() != &Token::GreaterThan {
+            while self.current_token() != &Token::GreaterThan && self.current_token() != &Token::EOF {
                 let name = self.expect_identifier()?;
+
                 let constraint =
                     if self.current_token() == &Token::Keyword(crate::lexer::Keyword::Extends) {
                         self.advance();
@@ -1287,6 +1290,8 @@ impl Parser {
 
                 if self.current_token() == &Token::Comma {
                     self.advance();
+                } else {
+                    break;
                 }
             }
 
@@ -1819,7 +1824,7 @@ impl Parser {
 
     fn parse_interface_member(&mut self) -> Result<ObjectTypeMember> {
         let mut readonly = false;
-        
+
         // Check for readonly modifier
         if let Token::Keyword(crate::lexer::Keyword::Readonly) = self.current_token() {
             readonly = true;
