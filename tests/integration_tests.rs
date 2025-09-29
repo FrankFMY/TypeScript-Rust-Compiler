@@ -2,7 +2,7 @@
 
 use std::fs;
 use tempfile::TempDir;
-use typescript_rust_compiler::compiler::Compiler;
+use TypeScript_Rust_Compiler::compiler::Compiler;
 
 /// Test basic TypeScript compilation
 #[test]

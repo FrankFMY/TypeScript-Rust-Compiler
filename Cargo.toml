@@ -1,5 +1,5 @@
 [package]
-name = "typescript-rust-compiler"
+name = "TypeScript-Rust-Compiler"
 version = "0.3.9"
 edition = "2021"
 authors = ["FrankFMY <pryanishnikovartem@gmail.com>"]
@@ -10,7 +10,7 @@ keywords = ["typescript", "rust", "compiler", "transpiler"]
 categories = ["compilers", "development-tools"]
 
 [[bin]]
-name = "typescript-rust-compiler"
+name = "TypeScript-Rust-Compiler"
 path = "src/main.rs"
 
 [dependencies]

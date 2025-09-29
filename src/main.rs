@@ -1,10 +1,10 @@
 use clap::Parser;
 use std::path::PathBuf;
-use typescript_rust_compiler::compiler::Compiler;
-use typescript_rust_compiler::error::Result;
+use TypeScript_Rust_Compiler::compiler::Compiler;
+use TypeScript_Rust_Compiler::error::Result;
 
 #[derive(Parser)]
-#[command(name = "typescript-rust-compiler")]
+#[command(name = "TypeScript-Rust-Compiler")]
 #[command(about = "High-performance TypeScript to Rust compiler")]
 #[command(version)]
 struct Cli {
